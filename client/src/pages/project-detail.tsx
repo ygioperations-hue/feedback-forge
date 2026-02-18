@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Copy, ExternalLink, Star, MessageSquareText, ListChecks, Code, Check } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Star, MessageSquareText, ListChecks, Code, Check, Map } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { ProjectWithQuestions, ResponseWithAnswers, Question } from "@shared/schema";
 
@@ -171,6 +171,12 @@ export default function ProjectDetail() {
           <Button variant="outline" size="sm" data-testid="button-open-form">
             <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
             Open Form
+          </Button>
+        </Link>
+        <Link href={`/roadmap/${project.slug}`} target="_blank">
+          <Button variant="outline" size="sm" data-testid="button-open-roadmap">
+            <Map className="w-3.5 h-3.5 mr-1.5" />
+            Roadmap
           </Button>
         </Link>
       </div>

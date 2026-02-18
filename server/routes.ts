@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema } from "@shared/schema";
+import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRoadmapItemSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
 
@@ -167,6 +167,42 @@ export async function registerRoutes(
       res.status(201).json(response);
     } catch (err) {
       res.status(500).json({ message: "Failed to submit widget feedback" });
+    }
+  });
+
+  app.get("/api/roadmap/:slug", async (req, res) => {
+    try {
+      const project = await storage.getProjectBySlug(req.params.slug);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const items = await storage.getRoadmapItemsByProject(project.id);
+      res.json({ project: { id: project.id, name: project.name, description: project.description, slug: project.slug }, items });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch roadmap" });
+    }
+  });
+
+  app.post("/api/roadmap/:slug/items", async (req, res) => {
+    try {
+      const project = await storage.getProjectBySlug(req.params.slug);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const parsed = insertRoadmapItemSchema.pick({ title: true, description: true, status: true, order: true }).safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+      const item = await storage.createRoadmapItem({ ...parsed.data, projectId: project.id });
+      res.status(201).json(item);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create roadmap item" });
+    }
+  });
+
+  app.post("/api/roadmap/items/:id/upvote", async (req, res) => {
+    try {
+      const item = await storage.upvoteRoadmapItem(req.params.id);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      res.json(item);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to upvote" });
     }
   });
 

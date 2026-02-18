@@ -14,6 +14,7 @@ import ProjectNew from "@/pages/project-new";
 import ProjectDetail from "@/pages/project-detail";
 import PublicForm from "@/pages/public-form";
 import ResponsesList from "@/pages/responses-list";
+import PublicRoadmap from "@/pages/public-roadmap";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const style = {
@@ -43,6 +44,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/form/:slug" component={PublicForm} />
+      <Route path="/roadmap/:slug" component={PublicRoadmap} />
       <Route path="/">
         <AppLayout><Dashboard /></AppLayout>
       </Route>

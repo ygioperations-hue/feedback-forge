@@ -1,5 +1,5 @@
 import { db } from "./storage";
-import { projects, questions, responses, answers } from "@shared/schema";
+import { projects, questions, responses, answers, roadmapItems } from "@shared/schema";
 
 export async function seedDatabase() {
   const existingProjects = await db.select().from(projects);
@@ -82,6 +82,21 @@ export async function seedDatabase() {
     { responseId: r6.id, questionId: q3b.id, value: "Advanced Analytics" },
     { responseId: r6.id, questionId: q3c.id, value: "A Slack integration for real-time notifications would be amazing." },
   ]);
+
+  const existingRoadmap = await db.select().from(roadmapItems);
+  if (existingRoadmap.length === 0) {
+    await db.insert(roadmapItems).values([
+      { projectId: p1.id, title: "Responsive mobile navigation", description: "Redesign the navigation menu to work seamlessly on mobile devices with a hamburger menu and smooth transitions.", status: "completed", upvotes: 24, order: 0 },
+      { projectId: p1.id, title: "Dark mode support", description: "Add a dark color scheme that respects user system preferences and can be toggled manually.", status: "in_progress", upvotes: 42, order: 1 },
+      { projectId: p1.id, title: "Accessibility audit", description: "Conduct a full WCAG 2.1 AA compliance audit and fix all issues found.", status: "planned", upvotes: 18, order: 2 },
+      { projectId: p1.id, title: "Performance optimization", description: "Improve Lighthouse scores by lazy loading images, code splitting, and optimizing critical rendering path.", status: "planned", upvotes: 31, order: 3 },
+      { projectId: p1.id, title: "Search functionality", description: "Add full-text search across all pages with instant results and filters.", status: "under_review", upvotes: 15, order: 4 },
+      { projectId: p3.id, title: "API Integrations", description: "Build REST API endpoints for third-party integrations with webhooks support.", status: "in_progress", upvotes: 37, order: 0 },
+      { projectId: p3.id, title: "Advanced Analytics Dashboard", description: "Real-time charts and KPIs with customizable date ranges and export options.", status: "planned", upvotes: 29, order: 1 },
+      { projectId: p3.id, title: "Team Collaboration", description: "Invite team members, assign roles, and add commenting on feedback responses.", status: "planned", upvotes: 22, order: 2 },
+      { projectId: p3.id, title: "Mobile App (iOS & Android)", description: "Native mobile apps for on-the-go feedback collection and management.", status: "under_review", upvotes: 45, order: 3 },
+    ]);
+  }
 
   console.log("Database seeded successfully");
 }

@@ -37,10 +37,22 @@ export const answers = pgTable("answers", {
   value: text("value").notNull(),
 });
 
+export const roadmapItems = pgTable("roadmap_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("planned"),
+  upvotes: integer("upvotes").notNull().default(0),
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
 export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
 export const insertResponseSchema = createInsertSchema(responses).omit({ id: true, submittedAt: true });
 export const insertAnswerSchema = createInsertSchema(answers).omit({ id: true });
+export const insertRoadmapItemSchema = createInsertSchema(roadmapItems).omit({ id: true, createdAt: true, upvotes: true });
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
@@ -50,6 +62,8 @@ export type FeedbackResponse = typeof responses.$inferSelect;
 export type InsertResponse = z.infer<typeof insertResponseSchema>;
 export type Answer = typeof answers.$inferSelect;
 export type InsertAnswer = z.infer<typeof insertAnswerSchema>;
+export type RoadmapItem = typeof roadmapItems.$inferSelect;
+export type InsertRoadmapItem = z.infer<typeof insertRoadmapItemSchema>;
 
 export type ProjectWithQuestions = Project & { questions: Question[] };
 export type ResponseWithAnswers = FeedbackResponse & { answers: Answer[] };

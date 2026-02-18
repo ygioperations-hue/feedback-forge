@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import {
@@ -6,6 +6,7 @@ import {
   questions,
   responses,
   answers,
+  roadmapItems,
   type Project,
   type InsertProject,
   type Question,
@@ -14,6 +15,8 @@ import {
   type InsertResponse,
   type Answer,
   type InsertAnswer,
+  type RoadmapItem,
+  type InsertRoadmapItem,
   type ProjectWithQuestions,
   type ResponseWithAnswers,
 } from "@shared/schema";
@@ -34,6 +37,9 @@ export interface IStorage {
   getResponsesByProject(projectId: string): Promise<ResponseWithAnswers[]>;
   createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[]): Promise<FeedbackResponse>;
   getOrCreateWidgetQuestions(projectId: string): Promise<{ ratingId: string; categoryId: string; messageId: string }>;
+  getRoadmapItemsByProject(projectId: string): Promise<RoadmapItem[]>;
+  createRoadmapItem(item: InsertRoadmapItem): Promise<RoadmapItem>;
+  upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -149,6 +155,20 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { ratingId: ratingQ.id, categoryId: categoryQ.id, messageId: messageQ.id };
+  }
+
+  async getRoadmapItemsByProject(projectId: string): Promise<RoadmapItem[]> {
+    return db.select().from(roadmapItems).where(eq(roadmapItems.projectId, projectId)).orderBy(roadmapItems.order);
+  }
+
+  async createRoadmapItem(item: InsertRoadmapItem): Promise<RoadmapItem> {
+    const [created] = await db.insert(roadmapItems).values(item).returning();
+    return created;
+  }
+
+  async upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined> {
+    const [updated] = await db.update(roadmapItems).set({ upvotes: sql`${roadmapItems.upvotes} + 1` }).where(eq(roadmapItems.id, id)).returning();
+    return updated;
   }
 }
 
