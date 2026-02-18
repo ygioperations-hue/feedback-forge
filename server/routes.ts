@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema } from "@shared/schema";
 import { z } from "zod";
+import OpenAI from "openai";
 
 const createProjectBodySchema = z.object({
   project: insertProjectSchema,
@@ -130,6 +131,75 @@ export async function registerRoutes(
       res.status(201).json(response);
     } catch (err) {
       res.status(500).json({ message: "Failed to submit feedback" });
+    }
+  });
+
+  app.post("/api/ai/summary", async (_req, res) => {
+    try {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ message: "OpenAI API key not configured" });
+      }
+
+      const openai = new OpenAI({ apiKey });
+      const allResponses = await storage.getResponses();
+      const projects = await storage.getProjects();
+
+      if (allResponses.length === 0) {
+        return res.status(400).json({ message: "No feedback responses to analyze" });
+      }
+
+      const responses = allResponses.slice(-100);
+
+      const feedbackText = responses.map((r) => {
+        const project = projects.find((p) => p.id === r.projectId);
+        const answersText = r.answers.map((a) => a.value).join("; ");
+        return `[${project?.name || "Unknown"}] ${r.respondentName || "Anonymous"}: ${answersText}`;
+      }).join("\n");
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are a feedback analyst. Analyze the following user feedback and provide a structured summary. Return valid JSON with this exact structure: { \"bullets\": [\"bullet1\", \"bullet2\", \"bullet3\"], \"insight\": \"A paragraph of overall insight\", \"topRequests\": [\"request1\", \"request2\", \"request3\"] }. The bullets should be key takeaways. The insight should be a thoughtful paragraph. The topRequests should be the most common asks or themes.",
+          },
+          {
+            role: "user",
+            content: `Here are ${responses.length} feedback responses across ${projects.length} projects:\n\n${feedbackText}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      if (!content) {
+        return res.status(500).json({ message: "No response from AI" });
+      }
+
+      const aiResponseSchema = z.object({
+        bullets: z.array(z.string()).min(1).max(5),
+        insight: z.string().min(1),
+        topRequests: z.array(z.string()).min(1).max(5),
+      });
+
+      let parsed;
+      try {
+        parsed = aiResponseSchema.parse(JSON.parse(content));
+      } catch {
+        return res.status(500).json({ message: "AI returned an unexpected format. Please try again." });
+      }
+
+      res.json({
+        ...parsed,
+        responseCount: allResponses.length,
+        projectCount: projects.length,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("AI summary error:", err?.message);
+      res.status(500).json({ message: err?.message || "Failed to generate AI summary" });
     }
   });
 
