@@ -33,6 +33,7 @@ export interface IStorage {
   getResponses(): Promise<(FeedbackResponse & { answers: Answer[] })[]>;
   getResponsesByProject(projectId: string): Promise<ResponseWithAnswers[]>;
   createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[]): Promise<FeedbackResponse>;
+  getOrCreateWidgetQuestions(projectId: string): Promise<{ ratingId: string; categoryId: string; messageId: string }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -96,6 +97,58 @@ export class DatabaseStorage implements IStorage {
       );
     }
     return created;
+  }
+
+  async getOrCreateWidgetQuestions(projectId: string): Promise<{ ratingId: string; categoryId: string; messageId: string }> {
+    const existing = await db.select().from(questions).where(eq(questions.projectId, projectId));
+
+    const widgetLabels = {
+      rating: "Widget Rating",
+      category: "Widget Category",
+      message: "Widget Message",
+    };
+
+    let ratingQ = existing.find((q) => q.label === widgetLabels.rating && q.type === "rating");
+    let categoryQ = existing.find((q) => q.label === widgetLabels.category && q.type === "multiple_choice");
+    let messageQ = existing.find((q) => q.label === widgetLabels.message && q.type === "text");
+
+    if (!ratingQ) {
+      const [created] = await db.insert(questions).values({
+        projectId,
+        label: widgetLabels.rating,
+        type: "rating",
+        required: true,
+        options: [],
+        order: 900,
+      }).returning();
+      ratingQ = created;
+    }
+
+    if (!categoryQ) {
+      const [created] = await db.insert(questions).values({
+        projectId,
+        label: widgetLabels.category,
+        type: "multiple_choice",
+        required: true,
+        options: ["Bug", "Feature", "Idea", "Other"],
+        order: 901,
+      }).returning();
+      categoryQ = created;
+    }
+
+    if (!messageQ) {
+      const [created] = await db.insert(questions).values({
+        projectId,
+        label: widgetLabels.message,
+        type: "text",
+        required: true,
+        options: [],
+        order: 902,
+      }).returning();
+      messageQ = created;
+    }
+
+    return { ratingId: ratingQ.id, categoryId: categoryQ.id, messageId: messageQ.id };
   }
 }
 

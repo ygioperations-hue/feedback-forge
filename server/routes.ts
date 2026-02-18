@@ -134,6 +134,42 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/widget/:slug/submit", async (req, res) => {
+    try {
+      const project = await storage.getProjectBySlug(req.params.slug);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const widgetSchema = z.object({
+        rating: z.number().int().min(1).max(5),
+        category: z.enum(["Bug", "Feature", "Idea", "Other"]),
+        message: z.string().min(1),
+        name: z.string().optional(),
+        email: z.string().email().optional().or(z.literal("")),
+      });
+
+      const parsed = widgetSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+
+      const { rating, category, message, name, email } = parsed.data;
+      const qIds = await storage.getOrCreateWidgetQuestions(project.id);
+
+      const response = await storage.createResponse(
+        { projectId: project.id, respondentName: name?.trim() || null, respondentEmail: email?.trim() || null },
+        [
+          { questionId: qIds.ratingId, value: String(rating) },
+          { questionId: qIds.categoryId, value: category },
+          { questionId: qIds.messageId, value: message },
+        ]
+      );
+
+      res.status(201).json(response);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to submit widget feedback" });
+    }
+  });
+
   app.post("/api/ai/summary", async (_req, res) => {
     try {
       const apiKey = process.env.OPENAI_API_KEY;
