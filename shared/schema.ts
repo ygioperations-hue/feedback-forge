@@ -9,6 +9,7 @@ export const projects = pgTable("projects", {
   description: text("description"),
   status: text("status").notNull().default("active"),
   slug: text("slug").notNull().unique(),
+  plan: text("plan").notNull().default("free"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -48,11 +49,30 @@ export const roadmapItems = pgTable("roadmap_items", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const changelogItems = pgTable("changelog_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  type: text("type").notNull().default("improvement"),
+  publishedAt: timestamp("published_at").notNull().defaultNow(),
+});
+
+export const ltdCodes = pgTable("ltd_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  isRedeemed: boolean("is_redeemed").notNull().default(false),
+  redeemedAt: timestamp("redeemed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
 export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
 export const insertResponseSchema = createInsertSchema(responses).omit({ id: true, submittedAt: true });
 export const insertAnswerSchema = createInsertSchema(answers).omit({ id: true });
 export const insertRoadmapItemSchema = createInsertSchema(roadmapItems).omit({ id: true, createdAt: true, upvotes: true });
+export const insertChangelogItemSchema = createInsertSchema(changelogItems).omit({ id: true });
+export const insertLtdCodeSchema = createInsertSchema(ltdCodes).omit({ id: true, createdAt: true, isRedeemed: true, redeemedAt: true });
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
@@ -64,6 +84,10 @@ export type Answer = typeof answers.$inferSelect;
 export type InsertAnswer = z.infer<typeof insertAnswerSchema>;
 export type RoadmapItem = typeof roadmapItems.$inferSelect;
 export type InsertRoadmapItem = z.infer<typeof insertRoadmapItemSchema>;
+export type ChangelogItem = typeof changelogItems.$inferSelect;
+export type InsertChangelogItem = z.infer<typeof insertChangelogItemSchema>;
+export type LtdCode = typeof ltdCodes.$inferSelect;
+export type InsertLtdCode = z.infer<typeof insertLtdCodeSchema>;
 
 export type ProjectWithQuestions = Project & { questions: Question[] };
 export type ResponseWithAnswers = FeedbackResponse & { answers: Answer[] };

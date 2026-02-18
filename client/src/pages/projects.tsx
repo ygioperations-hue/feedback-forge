@@ -3,8 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FolderPlus, ExternalLink, MoreVertical, Copy, Trash2 } from "lucide-react";
-import { Link } from "wouter";
+import { FolderPlus, ExternalLink, MoreVertical, Copy, Trash2, Crown } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,14 +16,29 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Project, FeedbackResponse } from "@shared/schema";
 
+type LimitsData = {
+  plan: string;
+  projectCount: number;
+  totalResponses: number;
+  maxProjects: number;
+  maxResponses: number;
+  canCreateProject: boolean;
+  canSubmitResponse: boolean;
+};
+
 export default function Projects() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
   });
 
   const { data: responses } = useQuery<FeedbackResponse[]>({
     queryKey: ["/api/responses"],
+  });
+
+  const { data: limits } = useQuery<LimitsData>({
+    queryKey: ["/api/limits"],
   });
 
   const deleteMutation = useMutation({
@@ -53,12 +68,25 @@ export default function Projects() {
           <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-projects-title">Projects</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage your feedback collection projects</p>
         </div>
-        <Link href="/projects/new">
-          <Button data-testid="button-new-project">
-            <FolderPlus className="w-4 h-4 mr-2" />
-            New Project
+        {limits && !limits.canCreateProject ? (
+          <Button
+            onClick={() => {
+              toast({ title: "Project limit reached", description: "Upgrade your plan to create more projects." });
+              navigate("/pricing");
+            }}
+            data-testid="button-new-project"
+          >
+            <Crown className="w-4 h-4 mr-2" />
+            Upgrade to Create
           </Button>
-        </Link>
+        ) : (
+          <Link href="/projects/new">
+            <Button data-testid="button-new-project">
+              <FolderPlus className="w-4 h-4 mr-2" />
+              New Project
+            </Button>
+          </Link>
+        )}
       </div>
 
       {isLoading ? (

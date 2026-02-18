@@ -7,6 +7,8 @@ import {
   responses,
   answers,
   roadmapItems,
+  changelogItems,
+  ltdCodes,
   type Project,
   type InsertProject,
   type Question,
@@ -17,6 +19,9 @@ import {
   type InsertAnswer,
   type RoadmapItem,
   type InsertRoadmapItem,
+  type ChangelogItem,
+  type InsertChangelogItem,
+  type LtdCode,
   type ProjectWithQuestions,
   type ResponseWithAnswers,
 } from "@shared/schema";
@@ -40,6 +45,14 @@ export interface IStorage {
   getRoadmapItemsByProject(projectId: string): Promise<RoadmapItem[]>;
   createRoadmapItem(item: InsertRoadmapItem): Promise<RoadmapItem>;
   upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
+  getChangelogByProject(projectId: string): Promise<ChangelogItem[]>;
+  createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem>;
+  generateLtdCode(): Promise<LtdCode>;
+  getLtdCodes(): Promise<LtdCode[]>;
+  redeemLtdCode(code: string): Promise<LtdCode | null>;
+  getResponseCountByProject(projectId: string): Promise<number>;
+  getProjectCount(): Promise<number>;
+  upgradeAllProjectsToLifetime(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -169,6 +182,46 @@ export class DatabaseStorage implements IStorage {
   async upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined> {
     const [updated] = await db.update(roadmapItems).set({ upvotes: sql`${roadmapItems.upvotes} + 1` }).where(eq(roadmapItems.id, id)).returning();
     return updated;
+  }
+
+  async getChangelogByProject(projectId: string): Promise<ChangelogItem[]> {
+    return db.select().from(changelogItems).where(eq(changelogItems.projectId, projectId)).orderBy(changelogItems.publishedAt);
+  }
+
+  async createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem> {
+    const [created] = await db.insert(changelogItems).values(item).returning();
+    return created;
+  }
+
+  async generateLtdCode(): Promise<LtdCode> {
+    const code = "FF-" + Array.from({ length: 3 }, () => Math.random().toString(36).substring(2, 6).toUpperCase()).join("-");
+    const [created] = await db.insert(ltdCodes).values({ code }).returning();
+    return created;
+  }
+
+  async getLtdCodes(): Promise<LtdCode[]> {
+    return db.select().from(ltdCodes).orderBy(ltdCodes.createdAt);
+  }
+
+  async redeemLtdCode(code: string): Promise<LtdCode | null> {
+    const [existing] = await db.select().from(ltdCodes).where(eq(ltdCodes.code, code));
+    if (!existing || existing.isRedeemed) return null;
+    const [updated] = await db.update(ltdCodes).set({ isRedeemed: true, redeemedAt: new Date() }).where(eq(ltdCodes.id, existing.id)).returning();
+    return updated;
+  }
+
+  async getResponseCountByProject(projectId: string): Promise<number> {
+    const result = await db.select().from(responses).where(eq(responses.projectId, projectId));
+    return result.length;
+  }
+
+  async getProjectCount(): Promise<number> {
+    const result = await db.select().from(projects);
+    return result.length;
+  }
+
+  async upgradeAllProjectsToLifetime(): Promise<void> {
+    await db.update(projects).set({ plan: "lifetime" });
   }
 }
 

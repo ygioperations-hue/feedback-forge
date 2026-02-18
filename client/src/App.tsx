@@ -15,6 +15,9 @@ import ProjectDetail from "@/pages/project-detail";
 import PublicForm from "@/pages/public-form";
 import ResponsesList from "@/pages/responses-list";
 import PublicRoadmap from "@/pages/public-roadmap";
+import PublicChangelog from "@/pages/public-changelog";
+import Pricing from "@/pages/pricing";
+import LtdAdmin from "@/pages/ltd-admin";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const style = {
@@ -45,6 +48,8 @@ function Router() {
     <Switch>
       <Route path="/form/:slug" component={PublicForm} />
       <Route path="/roadmap/:slug" component={PublicRoadmap} />
+      <Route path="/changelog/:slug" component={PublicChangelog} />
+      <Route path="/pricing" component={Pricing} />
       <Route path="/">
         <AppLayout><Dashboard /></AppLayout>
       </Route>
@@ -59,6 +64,9 @@ function Router() {
       </Route>
       <Route path="/responses">
         <AppLayout><ResponsesList /></AppLayout>
+      </Route>
+      <Route path="/ltd-admin">
+        <AppLayout><LtdAdmin /></AppLayout>
       </Route>
       <Route>
         <AppLayout><NotFound /></AppLayout>

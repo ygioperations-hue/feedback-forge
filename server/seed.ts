@@ -1,5 +1,5 @@
 import { db } from "./storage";
-import { projects, questions, responses, answers, roadmapItems } from "@shared/schema";
+import { projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
 
 export async function seedDatabase() {
   const existingProjects = await db.select().from(projects);
@@ -95,6 +95,18 @@ export async function seedDatabase() {
       { projectId: p3.id, title: "Advanced Analytics Dashboard", description: "Real-time charts and KPIs with customizable date ranges and export options.", status: "planned", upvotes: 29, order: 1 },
       { projectId: p3.id, title: "Team Collaboration", description: "Invite team members, assign roles, and add commenting on feedback responses.", status: "planned", upvotes: 22, order: 2 },
       { projectId: p3.id, title: "Mobile App (iOS & Android)", description: "Native mobile apps for on-the-go feedback collection and management.", status: "under_review", upvotes: 45, order: 3 },
+    ]);
+  }
+
+  const existingChangelog = await db.select().from(changelogItems);
+  if (existingChangelog.length === 0) {
+    await db.insert(changelogItems).values([
+      { projectId: p1.id, title: "Launched new homepage design", description: "Completely redesigned the homepage with a modern layout, improved hero section, and better call-to-action placement.", type: "feature", publishedAt: new Date("2026-02-10") },
+      { projectId: p1.id, title: "Fixed mobile navigation bug", description: "Resolved an issue where the mobile menu would not close after selecting a link.", type: "bugfix", publishedAt: new Date("2026-02-12") },
+      { projectId: p1.id, title: "Improved page load speed", description: "Optimized images and implemented lazy loading, reducing page load time by 40%.", type: "improvement", publishedAt: new Date("2026-02-15") },
+      { projectId: p1.id, title: "Added dark mode toggle", description: "Users can now switch between light and dark themes from the header.", type: "feature", publishedAt: new Date("2026-02-17") },
+      { projectId: p3.id, title: "API v2 released", description: "New REST API with rate limiting, webhooks, and improved documentation.", type: "feature", publishedAt: new Date("2026-02-14") },
+      { projectId: p3.id, title: "Dashboard performance update", description: "Charts now load 3x faster with server-side rendering and data caching.", type: "improvement", publishedAt: new Date("2026-02-16") },
     ]);
   }
 

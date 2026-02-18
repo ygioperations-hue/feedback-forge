@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRoadmapItemSchema } from "@shared/schema";
+import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRoadmapItemSchema, insertChangelogItemSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
 
@@ -51,6 +51,13 @@ export async function registerRoutes(
 
   app.post("/api/projects", async (req, res) => {
     try {
+      const projectCount = await storage.getProjectCount();
+      const allProjects = await storage.getProjects();
+      const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
+      if (!hasLifetime && projectCount >= 1) {
+        return res.status(403).json({ message: "Free plan limit: 1 project. Upgrade to create more." });
+      }
+
       const parsed = createProjectBodySchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
@@ -120,6 +127,18 @@ export async function registerRoutes(
         const answer = answers.find((a) => a.questionId === rq.id);
         if (!answer || !answer.value || answer.value.trim() === "") {
           return res.status(400).json({ message: `Answer for "${rq.label}" is required` });
+        }
+      }
+
+      const allProjects = await storage.getProjects();
+      const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
+      if (!hasLifetime) {
+        let totalResponses = 0;
+        for (const p of allProjects) {
+          totalResponses += await storage.getResponseCountByProject(p.id);
+        }
+        if (totalResponses >= 50) {
+          return res.status(403).json({ message: "Free plan limit: 50 responses. Upgrade for unlimited." });
         }
       }
 
@@ -272,6 +291,91 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("AI summary error:", err?.message);
       res.status(500).json({ message: err?.message || "Failed to generate AI summary" });
+    }
+  });
+
+  app.get("/api/changelog/:slug", async (req, res) => {
+    try {
+      const project = await storage.getProjectBySlug(req.params.slug);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const items = await storage.getChangelogByProject(project.id);
+      res.json({ project: { id: project.id, name: project.name, description: project.description, slug: project.slug }, items });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch changelog" });
+    }
+  });
+
+  app.post("/api/changelog/:slug/items", async (req, res) => {
+    try {
+      const project = await storage.getProjectBySlug(req.params.slug);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const parsed = insertChangelogItemSchema.pick({ title: true, description: true, type: true }).safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+      const item = await storage.createChangelogItem({ ...parsed.data, projectId: project.id });
+      res.status(201).json(item);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create changelog item" });
+    }
+  });
+
+  app.get("/api/ltd/codes", async (_req, res) => {
+    try {
+      const codes = await storage.getLtdCodes();
+      res.json(codes);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch LTD codes" });
+    }
+  });
+
+  app.post("/api/ltd/generate", async (_req, res) => {
+    try {
+      const code = await storage.generateLtdCode();
+      res.status(201).json(code);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to generate code" });
+    }
+  });
+
+  app.post("/api/ltd/redeem", async (req, res) => {
+    try {
+      const schema = z.object({ code: z.string().min(1) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Code is required" });
+      const redeemed = await storage.redeemLtdCode(parsed.data.code);
+      if (!redeemed) return res.status(400).json({ message: "Invalid or already redeemed code" });
+      await storage.upgradeAllProjectsToLifetime();
+      res.json(redeemed);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to redeem code" });
+    }
+  });
+
+  app.get("/api/limits", async (_req, res) => {
+    try {
+      const projectCount = await storage.getProjectCount();
+      const projects = await storage.getProjects();
+      let totalResponses = 0;
+      for (const p of projects) {
+        totalResponses += await storage.getResponseCountByProject(p.id);
+      }
+      const hasLifetime = projects.some(p => p.plan === "lifetime" || p.plan === "paid");
+      const plan = hasLifetime ? "lifetime" : "free";
+      const limits = plan === "free"
+        ? { maxProjects: 1, maxResponses: 50 }
+        : { maxProjects: Infinity, maxResponses: Infinity };
+      res.json({
+        plan,
+        projectCount,
+        totalResponses,
+        maxProjects: limits.maxProjects,
+        maxResponses: limits.maxResponses,
+        canCreateProject: plan !== "free" || projectCount < limits.maxProjects,
+        canSubmitResponse: plan !== "free" || totalResponses < limits.maxResponses,
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch limits" });
     }
   });
 

@@ -1,4 +1,4 @@
-import { LayoutDashboard, FolderPlus, MessageSquareText } from "lucide-react";
+import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, CreditCard } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -17,6 +17,8 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderPlus },
   { title: "Responses", url: "/responses", icon: MessageSquareText },
+  { title: "LTD Codes", url: "/ltd-admin", icon: Crown },
+  { title: "Pricing", url: "/pricing", icon: CreditCard },
 ];
 
 export function AppSidebar() {
