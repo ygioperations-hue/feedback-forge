@@ -8,17 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { PaywallGate } from "@/components/paywall-gate";
 import type { Project, FeedbackResponse } from "@shared/schema";
-
-type LimitsData = {
-  plan: string;
-  projectCount: number;
-  totalResponses: number;
-  maxProjects: number;
-  maxResponses: number;
-  canCreateProject: boolean;
-  canSubmitResponse: boolean;
-};
 
 interface AISummary {
   bullets: string[];
@@ -30,6 +21,14 @@ interface AISummary {
 }
 
 export default function Dashboard() {
+  return (
+    <PaywallGate>
+      <DashboardContent />
+    </PaywallGate>
+  );
+}
+
+function DashboardContent() {
   const { toast } = useToast();
   const [aiSummary, setAiSummary] = useState<AISummary | null>(null);
 
@@ -39,10 +38,6 @@ export default function Dashboard() {
 
   const { data: responses, isLoading: loadingResponses } = useQuery<FeedbackResponse[]>({
     queryKey: ["/api/responses"],
-  });
-
-  const { data: limits } = useQuery<LimitsData>({
-    queryKey: ["/api/limits"],
   });
 
   const summaryMutation = useMutation({
@@ -115,32 +110,6 @@ export default function Dashboard() {
           </Button>
         </Link>
       </div>
-
-      {limits && limits.plan === "free" && (
-        <Card data-testid="card-plan-usage">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-9 h-9 rounded-md bg-amber-500/10 shrink-0">
-                  <Crown className="w-4 h-4 text-amber-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Free Plan</p>
-                  <p className="text-xs text-muted-foreground">
-                    {limits.projectCount}/{limits.maxProjects} projects, {limits.totalResponses}/{limits.maxResponses} responses
-                  </p>
-                </div>
-              </div>
-              <Link href="/pricing">
-                <Button variant="outline" size="sm" data-testid="button-upgrade-plan">
-                  <Crown className="w-3.5 h-3.5 mr-1.5" />
-                  Upgrade
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (

@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Plus, Trash2, GripVertical, Star, MessageSquareText, ListChecks } from "lucide-react";
 import { Link } from "wouter";
+import { PaywallGate } from "@/components/paywall-gate";
 
 type QuestionDraft = {
   id: string;
@@ -31,6 +32,14 @@ function QuestionTypeIcon({ type }: { type: string }) {
 }
 
 export default function ProjectNew() {
+  return (
+    <PaywallGate>
+      <ProjectNewContent />
+    </PaywallGate>
+  );
+}
+
+function ProjectNewContent() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [name, setName] = useState("");

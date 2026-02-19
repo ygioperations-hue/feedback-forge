@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Copy, ExternalLink, Star, MessageSquareText, ListChecks, Code, Check, Map, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PaywallGate } from "@/components/paywall-gate";
 import type { ProjectWithQuestions, ResponseWithAnswers, Question } from "@shared/schema";
 
 function RatingDisplay({ value }: { value: number }) {
@@ -83,6 +84,14 @@ function ResponseCard({ response, questions }: { response: ResponseWithAnswers; 
 }
 
 export default function ProjectDetail() {
+  return (
+    <PaywallGate>
+      <ProjectDetailContent />
+    </PaywallGate>
+  );
+}
+
+function ProjectDetailContent() {
   const { toast } = useToast();
   const [, params] = useRoute("/projects/:id");
   const projectId = params?.id;

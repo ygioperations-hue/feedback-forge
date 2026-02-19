@@ -50,13 +50,16 @@ FeedbackForge is a feedback collection and management tool. Users can create fee
 - POST /api/ltd/redeem - Redeem an LTD code
 - GET /api/limits - Get current plan usage/limits
 
-## Pricing & Paywall
-- Free plan: 1 project, 50 responses
+## Pricing & Paywall (No Free Tier - Option A Strict)
+- No free accounts: account must be activated via paid plan or LTD code
 - Monthly plan: $29/month, unlimited (UI only, no payment processing)
 - Yearly plan: $249/year, unlimited (UI only, no payment processing)
 - Lifetime deal: Via redeemable codes generated in LTD admin page
-- Paywall enforced in frontend with redirect to /pricing when limits hit
-- Dashboard shows plan usage banner for free plan users
+- All app pages (dashboard, projects, responses, project detail) gated behind PaywallGate component
+- Non-activated users see full-screen "Activate Your Account" paywall with feature list and link to /pricing
+- Server-side enforcement: POST /api/projects, /api/forms/:slug/submit, /api/widget/:slug/submit, /api/ai/summary return 403 for non-activated accounts
+- /api/limits returns { activated: boolean } to determine account state
+- LTD code redemption upgrades all projects to "lifetime" plan
 
 ## Changelog
 - Public page at /changelog/:slug - no login required

@@ -51,11 +51,12 @@ export async function registerRoutes(
 
   app.post("/api/projects", async (req, res) => {
     try {
-      const projectCount = await storage.getProjectCount();
       const allProjects = await storage.getProjects();
+      const ltdCodes = await storage.getLtdCodes();
+      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
       const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
-      if (!hasLifetime && projectCount >= 1) {
-        return res.status(403).json({ message: "Free plan limit: 1 project. Upgrade to create more." });
+      if (!hasLifetime && !hasRedeemedCode) {
+        return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
       }
 
       const parsed = createProjectBodySchema.safeParse(req.body);
@@ -131,15 +132,11 @@ export async function registerRoutes(
       }
 
       const allProjects = await storage.getProjects();
+      const ltdCodes = await storage.getLtdCodes();
+      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
       const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
-      if (!hasLifetime) {
-        let totalResponses = 0;
-        for (const p of allProjects) {
-          totalResponses += await storage.getResponseCountByProject(p.id);
-        }
-        if (totalResponses >= 50) {
-          return res.status(403).json({ message: "Free plan limit: 50 responses. Upgrade for unlimited." });
-        }
+      if (!hasLifetime && !hasRedeemedCode) {
+        return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
       }
 
       const response = await storage.createResponse(
@@ -157,6 +154,14 @@ export async function registerRoutes(
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const allProjects = await storage.getProjects();
+      const ltdCodes = await storage.getLtdCodes();
+      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
+      const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
+      if (!hasLifetime && !hasRedeemedCode) {
+        return res.status(403).json({ message: "Account not activated. Feedback collection is paused." });
+      }
 
       const widgetSchema = z.object({
         rating: z.number().int().min(1).max(5),
@@ -227,6 +232,14 @@ export async function registerRoutes(
 
   app.post("/api/ai/summary", async (_req, res) => {
     try {
+      const allProjects = await storage.getProjects();
+      const ltdCodes = await storage.getLtdCodes();
+      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
+      const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
+      if (!hasLifetime && !hasRedeemedCode) {
+        return res.status(403).json({ message: "AI Insights requires an active plan. Upgrade to unlock." });
+      }
+
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ message: "OpenAI API key not configured" });
@@ -360,19 +373,20 @@ export async function registerRoutes(
       for (const p of projects) {
         totalResponses += await storage.getResponseCountByProject(p.id);
       }
+      const ltdCodes = await storage.getLtdCodes();
+      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
       const hasLifetime = projects.some(p => p.plan === "lifetime" || p.plan === "paid");
-      const plan = hasLifetime ? "lifetime" : "free";
-      const limits = plan === "free"
-        ? { maxProjects: 1, maxResponses: 50 }
-        : { maxProjects: Infinity, maxResponses: Infinity };
+      const activated = hasLifetime || hasRedeemedCode;
+      const plan = activated ? "lifetime" : "none";
       res.json({
         plan,
+        activated,
         projectCount,
         totalResponses,
-        maxProjects: limits.maxProjects,
-        maxResponses: limits.maxResponses,
-        canCreateProject: plan !== "free" || projectCount < limits.maxProjects,
-        canSubmitResponse: plan !== "free" || totalResponses < limits.maxResponses,
+        maxProjects: activated ? null : 0,
+        maxResponses: activated ? null : 0,
+        canCreateProject: activated,
+        canSubmitResponse: activated,
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch limits" });

@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquareText, Star } from "lucide-react";
 import { Link } from "wouter";
+import { PaywallGate } from "@/components/paywall-gate";
 import type { FeedbackResponse, Project, Answer, Question } from "@shared/schema";
 
 type ResponseWithProject = FeedbackResponse & {
@@ -13,6 +14,14 @@ type ResponseWithProject = FeedbackResponse & {
 };
 
 export default function ResponsesList() {
+  return (
+    <PaywallGate>
+      <ResponsesContent />
+    </PaywallGate>
+  );
+}
+
+function ResponsesContent() {
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
   });

@@ -6,39 +6,23 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Check, MessageSquareText, Shield, Zap, Crown, Users, BarChart3, Code, Star } from "lucide-react";
+import { Check, MessageSquareText, Shield, Zap, Crown, Users, BarChart3, Code, Star, Lock } from "lucide-react";
 import { Link } from "wouter";
 
 const plans = [
   {
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "Perfect for trying out FeedbackForge",
-    features: [
-      "1 feedback project",
-      "50 responses",
-      "Public feedback forms",
-      "Basic dashboard",
-      "Embeddable widget",
-    ],
-    cta: "Current Plan",
-    variant: "outline" as const,
-    popular: false,
-  },
-  {
     name: "Monthly",
     price: "$29",
     period: "/month",
-    description: "For growing teams collecting feedback",
+    description: "For teams starting to collect feedback",
     features: [
       "Unlimited projects",
       "Unlimited responses",
       "AI-powered insights",
       "Public roadmap",
       "Changelog page",
+      "Embeddable widget",
       "Priority support",
-      "Custom branding",
     ],
     cta: "Get Started",
     variant: "default" as const,
@@ -56,6 +40,7 @@ const plans = [
       "Team collaboration",
       "API access",
       "White-label option",
+      "Custom branding",
     ],
     cta: "Get Started",
     variant: "outline" as const,
@@ -65,10 +50,11 @@ const plans = [
 
 type LimitsData = {
   plan: string;
+  activated: boolean;
   projectCount: number;
   totalResponses: number;
-  maxProjects: number;
-  maxResponses: number;
+  maxProjects: number | null;
+  maxResponses: number | null;
   canCreateProject: boolean;
   canSubmitResponse: boolean;
 };
@@ -96,7 +82,7 @@ export default function Pricing() {
     },
   });
 
-  const isLifetime = limits?.plan === "lifetime";
+  const activated = limits?.activated ?? false;
 
   return (
     <div className="min-h-screen bg-background">
@@ -115,11 +101,20 @@ export default function Pricing() {
         </header>
 
         <div className="text-center mb-12 space-y-3">
-          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-pricing-title">Simple, transparent pricing</h1>
+          {!activated && (
+            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-amber-500/10 mx-auto mb-4">
+              <Lock className="w-7 h-7 text-amber-500" />
+            </div>
+          )}
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-pricing-title">
+            {activated ? "You're all set" : "Activate FeedbackForge"}
+          </h1>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            Start free, upgrade when you need more. No hidden fees.
+            {activated
+              ? "Your account is active with unlimited access to all features."
+              : "Choose a plan or redeem a Lifetime Deal code to unlock all features."}
           </p>
-          {isLifetime && (
+          {activated && (
             <Badge variant="default" className="text-sm" data-testid="badge-lifetime-active">
               <Crown className="w-3.5 h-3.5 mr-1" />
               Lifetime Deal Active
@@ -127,14 +122,48 @@ export default function Pricing() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        {!activated && (
+          <Card className="mb-8 border-amber-500/30" data-testid="card-ltd-redeem">
+            <CardContent className="p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10 shrink-0">
+                    <Crown className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Have a Lifetime Deal code?</h3>
+                    <p className="text-sm text-muted-foreground">Enter your code to unlock unlimited access forever - one payment, no recurring fees</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Input
+                    placeholder="FF-XXXX-XXXX-XXXX"
+                    value={ltdCode}
+                    onChange={(e) => setLtdCode(e.target.value)}
+                    className="w-48"
+                    data-testid="input-ltd-code"
+                  />
+                  <Button
+                    onClick={() => redeemMutation.mutate()}
+                    disabled={!ltdCode.trim() || redeemMutation.isPending}
+                    data-testid="button-redeem-ltd"
+                  >
+                    {redeemMutation.isPending ? "Redeeming..." : "Redeem"}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className={`grid grid-cols-1 ${activated ? "md:grid-cols-2" : "md:grid-cols-2"} gap-6 mb-12 max-w-3xl mx-auto`}>
           {plans.map((plan) => (
             <Card
               key={plan.name}
-              className={`relative ${plan.popular ? "border-primary" : ""}`}
+              className={`relative ${plan.popular && !activated ? "border-primary" : ""}`}
               data-testid={`card-plan-${plan.name.toLowerCase()}`}
             >
-              {plan.popular && (
+              {plan.popular && !activated && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <Badge variant="default" data-testid="badge-popular">Most Popular</Badge>
                 </div>
@@ -159,47 +188,15 @@ export default function Pricing() {
                 <Button
                   variant={plan.variant}
                   className="w-full"
-                  disabled={isLifetime || plan.name === "Free"}
+                  disabled={activated}
                   data-testid={`button-plan-${plan.name.toLowerCase()}`}
                 >
-                  {isLifetime ? "Lifetime Active" : plan.cta}
+                  {activated ? "Active" : plan.cta}
                 </Button>
               </CardContent>
             </Card>
           ))}
         </div>
-
-        <Card className="mb-12" data-testid="card-ltd-redeem">
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10 shrink-0">
-                  <Crown className="w-5 h-5 text-amber-500" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Have a Lifetime Deal code?</h3>
-                  <p className="text-sm text-muted-foreground">Enter your code to unlock unlimited access forever</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Input
-                  placeholder="FF-XXXX-XXXX-XXXX"
-                  value={ltdCode}
-                  onChange={(e) => setLtdCode(e.target.value)}
-                  className="w-48"
-                  data-testid="input-ltd-code"
-                />
-                <Button
-                  onClick={() => redeemMutation.mutate()}
-                  disabled={!ltdCode.trim() || redeemMutation.isPending}
-                  data-testid="button-redeem-ltd"
-                >
-                  {redeemMutation.isPending ? "Redeeming..." : "Redeem"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         <div className="text-center space-y-6 mb-12">
           <h2 className="text-xl font-semibold">Trusted by product teams everywhere</h2>
