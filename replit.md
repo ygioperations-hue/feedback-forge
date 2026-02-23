@@ -7,7 +7,7 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 - Session-based auth using express-session + connect-pg-simple (PostgreSQL session store)
 - Signup creates a user account (first name, last name, email, password)
 - All data (projects, responses, LTD codes) scoped to user via `userId`
-- Password reset via token-based flow (token logged to console for dev; email integration needed for production)
+- Password reset via 6-digit security code shown on screen (no email service needed)
 - Public pages (forms, roadmaps, changelogs, widget submissions, upvotes) remain unauthenticated
 - Dashboard routes protected by `requireAuth` middleware + `RequireAuth` React component
 - Demo account: demo@feedbackforge.app / password123
@@ -15,7 +15,8 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 ## Recent Changes
 - 2026-02-23: Reverted multi-tenant to single-user model (removed organizations table entirely)
 - 2026-02-23: Simplified signup (first name, last name, email, password only)
-- 2026-02-23: Added forgot password + reset password flow with token-based reset
+- 2026-02-23: Password reset changed from token-in-console to 6-digit on-screen code (10 min expiry)
+- 2026-02-23: Removed separate reset-password page; full reset flow on forgot-password page
 - 2026-02-23: All data scoped to userId instead of organizationId
 - 2026-02-23: Added draft/published status for projects
 - 2026-02-23: Added response detail page (/responses/:id) with full answer display
@@ -38,8 +39,7 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 - `client/src/lib/auth.tsx` - AuthProvider context, useAuth hook, RequireAuth gate component
 - `client/src/pages/login.tsx` - Login page with email/password
 - `client/src/pages/signup.tsx` - Signup page with first name, last name, email, password
-- `client/src/pages/forgot-password.tsx` - Forgot password page (email input, sends reset token)
-- `client/src/pages/reset-password.tsx` - Reset password page (new password + confirm, token from URL)
+- `client/src/pages/forgot-password.tsx` - Forgot password page (3-step: email input, code display + new password, success)
 - `client/src/pages/` - Dashboard, Projects, ProjectNew, ProjectDetail, PublicForm, PublicRoadmap, PublicChangelog, ResponsesList, ResponseDetail, Pricing, LtdAdmin
 - `client/src/components/app-sidebar.tsx` - Sidebar with app name, user email, logout button
 - `client/src/components/paywall-gate.tsx` - PaywallGate component for plan enforcement
@@ -52,8 +52,8 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 - POST /api/auth/login - Verify credentials, set session
 - POST /api/auth/logout - Destroy session
 - GET /api/auth/me - Return current user info
-- POST /api/auth/forgot-password - Generate reset token (logged to console)
-- POST /api/auth/reset-password - Validate token, update password
+- POST /api/auth/forgot-password - Generate 6-digit reset code (returned in response)
+- POST /api/auth/reset-password - Validate code + email, update password
 
 ### Protected (require auth, user-scoped)
 - GET /api/projects - List user's projects

@@ -23,7 +23,6 @@ import LtdAdmin from "@/pages/ltd-admin";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
-import ResetPassword from "@/pages/reset-password";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const style = {
@@ -57,7 +56,6 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/forgot-password" component={ForgotPassword} />
-      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/form/:slug" component={PublicForm} />
       <Route path="/roadmap/:slug" component={PublicRoadmap} />
       <Route path="/changelog/:slug" component={PublicChangelog} />
