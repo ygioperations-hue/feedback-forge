@@ -21,6 +21,7 @@ export const questions = pgTable("questions", {
   required: boolean("required").notNull().default(true),
   options: text("options").array(),
   order: integer("order").notNull().default(0),
+  source: text("source").notNull().default("form"),
 });
 
 export const responses = pgTable("responses", {

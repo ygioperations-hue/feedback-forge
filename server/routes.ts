@@ -180,7 +180,10 @@ export async function registerRoutes(
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Form not found" });
-      res.json(project);
+      res.json({
+        ...project,
+        questions: (project.questions || []).filter((q) => q.source !== "widget"),
+      });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch form" });
     }

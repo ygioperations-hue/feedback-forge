@@ -139,6 +139,7 @@ export class DatabaseStorage implements IStorage {
         required: true,
         options: [],
         order: 900,
+        source: "widget",
       }).returning();
       ratingQ = created;
     }
@@ -151,6 +152,7 @@ export class DatabaseStorage implements IStorage {
         required: true,
         options: ["Bug", "Feature", "Idea", "Other"],
         order: 901,
+        source: "widget",
       }).returning();
       categoryQ = created;
     }
@@ -163,6 +165,7 @@ export class DatabaseStorage implements IStorage {
         required: true,
         options: [],
         order: 902,
+        source: "widget",
       }).returning();
       messageQ = created;
     }
