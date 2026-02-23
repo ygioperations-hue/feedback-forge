@@ -9,6 +9,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AuthProvider, RequireAuth } from "@/lib/auth";
 import NotFound from "@/pages/not-found";
+import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Projects from "@/pages/projects";
 import ProjectNew from "@/pages/project-new";
@@ -53,6 +54,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 function Router() {
   return (
     <Switch>
+      <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/forgot-password" component={ForgotPassword} />
@@ -60,7 +62,7 @@ function Router() {
       <Route path="/roadmap/:slug" component={PublicRoadmap} />
       <Route path="/changelog/:slug" component={PublicChangelog} />
       <Route path="/pricing" component={Pricing} />
-      <Route path="/">
+      <Route path="/dashboard">
         <AppLayout><Dashboard /></AppLayout>
       </Route>
       <Route path="/projects">

@@ -15,6 +15,9 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 ## Recent Changes
 - 2026-02-23: Reverted multi-tenant to single-user model (removed organizations table entirely)
 - 2026-02-23: Simplified signup (first name, last name, email, password only)
+- 2026-02-23: Added landing page at "/" with features, how-it-works, pricing, testimonials, CTA sections
+- 2026-02-23: Moved dashboard to "/dashboard" route; landing page is the public homepage
+- 2026-02-23: Removed pricing from sidebar; pricing is now part of landing page
 - 2026-02-23: Password reset changed from token-in-console to 6-digit on-screen code (10 min expiry)
 - 2026-02-23: Removed separate reset-password page; full reset flow on forgot-password page
 - 2026-02-23: All data scoped to userId instead of organizationId
@@ -40,6 +43,7 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 - `client/src/pages/login.tsx` - Login page with email/password
 - `client/src/pages/signup.tsx` - Signup page with first name, last name, email, password
 - `client/src/pages/forgot-password.tsx` - Forgot password page (3-step: email input, code display + new password, success)
+- `client/src/pages/landing.tsx` - Public landing page with hero, features, how-it-works, pricing, testimonials, CTA
 - `client/src/pages/` - Dashboard, Projects, ProjectNew, ProjectDetail, PublicForm, PublicRoadmap, PublicChangelog, ResponsesList, ResponseDetail, Pricing, LtdAdmin
 - `client/src/components/app-sidebar.tsx` - Sidebar with app name, user email, logout button
 - `client/src/components/paywall-gate.tsx` - PaywallGate component for plan enforcement

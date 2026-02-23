@@ -1,4 +1,4 @@
-import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, CreditCard, LogOut, User } from "lucide-react";
+import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
@@ -16,11 +16,10 @@ import {
 import { Button } from "@/components/ui/button";
 
 const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderPlus },
   { title: "Responses", url: "/responses", icon: MessageSquareText },
   { title: "LTD Codes", url: "/ltd-admin", icon: Crown },
-  { title: "Pricing", url: "/pricing", icon: CreditCard },
 ];
 
 export function AppSidebar() {

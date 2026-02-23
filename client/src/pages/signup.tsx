@@ -29,7 +29,7 @@ export default function Signup() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/");
+      setLocation("/dashboard");
     },
     onError: (err: Error) => {
       toast({

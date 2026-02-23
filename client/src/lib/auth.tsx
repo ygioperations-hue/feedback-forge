@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.clear();
-      setLocation("/login");
+      setLocation("/");
     },
   });
 
