@@ -123,7 +123,7 @@ function ProjectsContent() {
                   <div className="flex items-center justify-between gap-2 mt-4 flex-wrap">
                     <div className="flex items-center gap-2">
                       <Badge variant={project.status === "active" ? "default" : "secondary"} className="text-xs">
-                        {project.status}
+                        {project.status === "active" ? "Published" : "Draft"}
                       </Badge>
                       <span className="text-xs text-muted-foreground">{responseCount} responses</span>
                     </div>

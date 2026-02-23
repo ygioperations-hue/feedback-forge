@@ -38,6 +38,7 @@ export interface IStorage {
   getProjectBySlug(slug: string): Promise<ProjectWithQuestions | undefined>;
   createProject(project: InsertProject, questionsList: InsertQuestion[]): Promise<Project>;
   deleteProject(id: string): Promise<void>;
+  updateProjectStatus(id: string, status: string): Promise<Project | undefined>;
   getResponses(): Promise<(FeedbackResponse & { answers: Answer[] })[]>;
   getResponse(id: string): Promise<(FeedbackResponse & { answers: (Answer & { question: Question })[] }) | undefined>;
   getResponsesByProject(projectId: string): Promise<ResponseWithAnswers[]>;
@@ -87,6 +88,11 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProject(id: string): Promise<void> {
     await db.delete(projects).where(eq(projects.id, id));
+  }
+
+  async updateProjectStatus(id: string, status: string): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set({ status }).where(eq(projects.id, id)).returning();
+    return updated;
   }
 
   async getResponses(): Promise<(FeedbackResponse & { answers: Answer[] })[]> {

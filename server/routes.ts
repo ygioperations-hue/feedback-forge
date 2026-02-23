@@ -149,6 +149,20 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/projects/:id/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (status !== "active" && status !== "draft") {
+        return res.status(400).json({ message: "Status must be 'active' or 'draft'" });
+      }
+      const updated = await storage.updateProjectStatus(req.params.id, status);
+      if (!updated) return res.status(404).json({ message: "Project not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update project status" });
+    }
+  });
+
   app.delete("/api/projects/:id", async (req, res) => {
     try {
       await storage.deleteProject(req.params.id);
@@ -191,6 +205,7 @@ export async function registerRoutes(
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Form not found" });
+      if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
       res.json({
         ...project,
         questions: (project.questions || []).filter((q) => q.source !== "widget"),
@@ -204,6 +219,7 @@ export async function registerRoutes(
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Form not found" });
+      if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
 
       const parsed = submitFormBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -256,6 +272,7 @@ export async function registerRoutes(
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Project not found" });
+      if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
 
       const allProjects = await storage.getProjects();
       const ltdCodes = await storage.getLtdCodes();
@@ -307,6 +324,7 @@ export async function registerRoutes(
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Project not found" });
+      if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
       const items = await storage.getRoadmapItemsByProject(project.id);
       res.json({ project: { id: project.id, name: project.name, description: project.description, slug: project.slug }, items });
     } catch (err) {
@@ -421,6 +439,7 @@ export async function registerRoutes(
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Project not found" });
+      if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
       const items = await storage.getChangelogByProject(project.id);
       res.json({ project: { id: project.id, name: project.name, description: project.description, slug: project.slug }, items });
     } catch (err) {

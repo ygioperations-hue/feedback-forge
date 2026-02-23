@@ -7,7 +7,7 @@ export const projects = pgTable("projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description"),
-  status: text("status").notNull().default("active"),
+  status: text("status").notNull().default("draft"),
   slug: text("slug").notNull().unique(),
   plan: text("plan").notNull().default("free"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

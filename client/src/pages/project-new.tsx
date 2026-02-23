@@ -57,7 +57,7 @@ function ProjectNewContent() {
         + "-" + Math.random().toString(36).substring(2, 6);
 
       const res = await apiRequest("POST", "/api/projects", {
-        project: { name, description, slug, status: "active" },
+        project: { name, description, slug, status: "draft" },
         questions: questions.map((q, i) => ({
           label: q.label,
           type: q.type,

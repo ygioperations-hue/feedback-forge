@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Copy, ExternalLink, Star, MessageSquareText, ListChecks, Code, Check, Map, FileText } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Star, MessageSquareText, ListChecks, Code, Check, Map, FileText, Globe, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { PaywallGate } from "@/components/paywall-gate";
 import type { ProjectWithQuestions, ResponseWithAnswers, Question } from "@shared/schema";
 
@@ -106,6 +107,22 @@ function ProjectDetailContent() {
     enabled: !!projectId,
   });
 
+  const toggleStatusMutation = useMutation({
+    mutationFn: async () => {
+      if (!project) throw new Error("No project");
+      const newStatus = project.status === "active" ? "draft" : "active";
+      await apiRequest("PATCH", `/api/projects/${project.id}/status`, { status: newStatus });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: project?.status === "active" ? "Project unpublished" : "Project published" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update status", description: err.message, variant: "destructive" });
+    },
+  });
+
   const copyFormLink = () => {
     if (!project) return;
     const url = `${window.location.origin}/form/${project.slug}`;
@@ -161,8 +178,8 @@ function ProjectDetailContent() {
             <h1 className="text-2xl font-semibold tracking-tight truncate" data-testid="text-project-title">
               {project.name}
             </h1>
-            <Badge variant={project.status === "active" ? "default" : "secondary"}>
-              {project.status}
+            <Badge variant={project.status === "active" ? "default" : "secondary"} data-testid="badge-project-status">
+              {project.status === "active" ? "Published" : "Draft"}
             </Badge>
           </div>
           {project.description && (
@@ -172,24 +189,43 @@ function ProjectDetailContent() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={copyFormLink} data-testid="button-copy-form-link">
+        <Button
+          variant={project.status === "active" ? "outline" : "default"}
+          size="sm"
+          onClick={() => toggleStatusMutation.mutate()}
+          disabled={toggleStatusMutation.isPending}
+          data-testid="button-toggle-status"
+        >
+          {project.status === "active" ? (
+            <>
+              <EyeOff className="w-3.5 h-3.5 mr-1.5" />
+              {toggleStatusMutation.isPending ? "Unpublishing..." : "Unpublish"}
+            </>
+          ) : (
+            <>
+              <Globe className="w-3.5 h-3.5 mr-1.5" />
+              {toggleStatusMutation.isPending ? "Publishing..." : "Publish"}
+            </>
+          )}
+        </Button>
+        <Button variant="outline" size="sm" onClick={copyFormLink} disabled={project.status === "draft"} data-testid="button-copy-form-link">
           <Copy className="w-3.5 h-3.5 mr-1.5" />
           Copy Link
         </Button>
         <Link href={`/form/${project.slug}`} target="_blank">
-          <Button variant="outline" size="sm" data-testid="button-open-form">
+          <Button variant="outline" size="sm" disabled={project.status === "draft"} data-testid="button-open-form">
             <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
             Open Form
           </Button>
         </Link>
         <Link href={`/roadmap/${project.slug}`} target="_blank">
-          <Button variant="outline" size="sm" data-testid="button-open-roadmap">
+          <Button variant="outline" size="sm" disabled={project.status === "draft"} data-testid="button-open-roadmap">
             <Map className="w-3.5 h-3.5 mr-1.5" />
             Roadmap
           </Button>
         </Link>
         <Link href={`/changelog/${project.slug}`} target="_blank">
-          <Button variant="outline" size="sm" data-testid="button-open-changelog">
+          <Button variant="outline" size="sm" disabled={project.status === "draft"} data-testid="button-open-changelog">
             <FileText className="w-3.5 h-3.5 mr-1.5" />
             Changelog
           </Button>

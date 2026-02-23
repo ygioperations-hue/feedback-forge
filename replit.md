@@ -4,6 +4,10 @@
 FeedbackForge is a feedback collection and management tool. Users can create feedback projects with customizable questions (rating, text, multiple choice), share public forms via unique links, embed a feedback widget on any website, view/manage all responses from a dashboard, share a public roadmap with upvotable items, generate AI-powered insights using OpenAI, view product changelogs, manage pricing tiers, and administer lifetime deal codes.
 
 ## Recent Changes
+- 2026-02-23: Added draft/published status for projects (default: draft, publish from detail page)
+- 2026-02-23: Added response detail page (/responses/:id) with full answer display
+- 2026-02-23: Added source field to questions (form/widget) to separate them in public form
+- 2026-02-23: Added CORS support for widget and upvote endpoints
 - 2026-02-18: Added Pricing page with 3 tiers, trust badges, LTD code redemption
 - 2026-02-18: Added LTD Admin page for generating/managing lifetime deal codes
 - 2026-02-18: Added public Changelog page (/changelog/:slug) with timeline UI
@@ -33,6 +37,7 @@ FeedbackForge is a feedback collection and management tool. Users can create fee
 - GET /api/projects - List all projects
 - GET /api/projects/:id - Get project with questions
 - POST /api/projects - Create project + questions
+- PATCH /api/projects/:id/status - Toggle project status (draft/active)
 - DELETE /api/projects/:id - Delete project
 - GET /api/projects/:id/responses - Responses for a project
 - GET /api/responses - All responses
