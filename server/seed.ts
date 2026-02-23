@@ -1,32 +1,25 @@
 import { db } from "./storage";
-import { organizations, users, projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
+import { users, projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
 export async function seedDatabase() {
   const existingProjects = await db.select().from(projects);
   if (existingProjects.length > 0) return;
 
-  const existingOrgs = await db.select().from(organizations);
-  let orgId: string;
+  const existingUsers = await db.select().from(users);
+  let userId: string;
 
-  if (existingOrgs.length > 0) {
-    orgId = existingOrgs[0].id;
+  if (existingUsers.length > 0) {
+    userId = existingUsers[0].id;
   } else {
-    const [org] = await db.insert(organizations).values({
-      name: "Demo Company",
-      slug: "demo-company",
-    }).returning();
-    orgId = org.id;
-
     const hashedPassword = await bcrypt.hash("password123", 10);
-    await db.insert(users).values({
+    const [user] = await db.insert(users).values({
       email: "demo@feedbackforge.app",
       password: hashedPassword,
       firstName: "Demo",
       lastName: "User",
-      role: "admin",
-      organizationId: orgId,
-    });
+    }).returning();
+    userId = user.id;
   }
 
   const [p1] = await db.insert(projects).values({
@@ -34,7 +27,7 @@ export async function seedDatabase() {
     description: "Help us improve our new website design by sharing your thoughts on usability, aesthetics, and overall experience.",
     slug: "website-redesign-feedback",
     status: "active",
-    organizationId: orgId,
+    userId,
   }).returning();
 
   const [p2] = await db.insert(projects).values({
@@ -42,7 +35,7 @@ export async function seedDatabase() {
     description: "Rate your recent experience with our customer support team.",
     slug: "customer-support-survey",
     status: "active",
-    organizationId: orgId,
+    userId,
   }).returning();
 
   const [p3] = await db.insert(projects).values({
@@ -50,7 +43,7 @@ export async function seedDatabase() {
     description: "Vote on which features we should build next for our product roadmap.",
     slug: "feature-prioritization",
     status: "active",
-    organizationId: orgId,
+    userId,
   }).returning();
 
   const [q1a] = await db.insert(questions).values({ projectId: p1.id, label: "How would you rate the overall design?", type: "rating", required: true, order: 0 }).returning();

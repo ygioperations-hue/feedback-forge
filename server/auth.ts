@@ -3,7 +3,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 import bcrypt from "bcryptjs";
-import { storage } from "./storage";
+import crypto from "crypto";
 
 const PgSession = connectPgSimple(session);
 
@@ -14,7 +14,6 @@ const sessionPool = new pg.Pool({
 declare module "express-session" {
   interface SessionData {
     userId: string;
-    organizationId: string;
   }
 }
 
@@ -36,7 +35,7 @@ export const sessionMiddleware = session({
 });
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId || !req.session.organizationId) {
+  if (!req.session.userId) {
     return res.status(401).json({ message: "Not authenticated" });
   }
   next();
@@ -48,4 +47,8 @@ export async function hashPassword(password: string): Promise<string> {
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   return bcrypt.compare(password, hash);
+}
+
+export function generateResetToken(): string {
+  return crypto.randomBytes(32).toString("hex");
 }

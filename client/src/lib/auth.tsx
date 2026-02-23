@@ -8,23 +8,14 @@ type AuthUser = {
   email: string;
   firstName: string;
   lastName: string;
-  role: string;
-};
-
-type AuthOrganization = {
-  id: string;
-  name: string;
-  slug: string;
 };
 
 type AuthData = {
   user: AuthUser;
-  organization: AuthOrganization | null;
 } | null;
 
 type AuthContextType = {
   user: AuthUser | null;
-  organization: AuthOrganization | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   logout: () => void;
@@ -57,7 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user: authData?.user ?? null,
-        organization: authData?.organization ?? null,
         isLoading,
         isAuthenticated: !!authData?.user,
         logout: () => logoutMutation.mutate(),
