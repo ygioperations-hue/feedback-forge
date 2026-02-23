@@ -1,10 +1,24 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRoadmapItemSchema, insertChangelogItemSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
 import rateLimit from "express-rate-limit";
+
+function widgetCors(req: Request, res: Response, next: NextFunction) {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "86400");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+}
 
 const publicSubmitLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -223,7 +237,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/widget/:slug/submit", publicSubmitLimiter, async (req: any, res) => {
+  app.options("/api/widget/:slug/submit", widgetCors);
+  app.post("/api/widget/:slug/submit", widgetCors, publicSubmitLimiter, async (req: any, res) => {
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Project not found" });
@@ -300,7 +315,8 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/roadmap/items/:id/upvote", upvoteLimiter, async (req: any, res) => {
+  app.options("/api/roadmap/items/:id/upvote", widgetCors);
+  app.post("/api/roadmap/items/:id/upvote", widgetCors, upvoteLimiter, async (req: any, res) => {
     try {
       const item = await storage.upvoteRoadmapItem(req.params.id);
       if (!item) return res.status(404).json({ message: "Item not found" });
