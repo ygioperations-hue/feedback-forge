@@ -64,7 +64,7 @@ function ResponsesContent() {
       ) : sortedResponses.length > 0 ? (
         <div className="space-y-3">
           {sortedResponses.map((response) => (
-            <Link href={`/projects/${response.projectId}`} key={response.id}>
+            <Link href={`/responses/${response.id}`} key={response.id}>
               <Card className="hover-elevate cursor-pointer" data-testid={`card-response-list-${response.id}`}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between flex-wrap gap-2">

@@ -14,6 +14,7 @@ import ProjectNew from "@/pages/project-new";
 import ProjectDetail from "@/pages/project-detail";
 import PublicForm from "@/pages/public-form";
 import ResponsesList from "@/pages/responses-list";
+import ResponseDetail from "@/pages/response-detail";
 import PublicRoadmap from "@/pages/public-roadmap";
 import PublicChangelog from "@/pages/public-changelog";
 import Pricing from "@/pages/pricing";
@@ -64,6 +65,9 @@ function Router() {
       </Route>
       <Route path="/responses">
         <AppLayout><ResponsesList /></AppLayout>
+      </Route>
+      <Route path="/responses/:id">
+        <AppLayout><ResponseDetail /></AppLayout>
       </Route>
       <Route path="/ltd-admin">
         <AppLayout><LtdAdmin /></AppLayout>

@@ -25,7 +25,7 @@ FeedbackForge is a feedback collection and management tool. Users can create fee
 - `server/storage.ts` - DatabaseStorage class with all CRUD ops + widget + roadmap + changelog + LTD management
 - `server/routes.ts` - REST API endpoints under /api
 - `server/seed.ts` - Seeds 3 projects with questions, sample responses, roadmap items, and changelog items
-- `client/src/pages/` - Dashboard, Projects, ProjectNew, ProjectDetail, PublicForm, PublicRoadmap, PublicChangelog, ResponsesList, Pricing, LtdAdmin
+- `client/src/pages/` - Dashboard, Projects, ProjectNew, ProjectDetail, PublicForm, PublicRoadmap, PublicChangelog, ResponsesList, ResponseDetail, Pricing, LtdAdmin
 - `client/src/components/app-sidebar.tsx` - Sidebar navigation (Dashboard, Projects, Responses, LTD Codes, Pricing)
 - `client/src/lib/theme-provider.tsx` - Dark/light mode toggle
 
@@ -36,6 +36,7 @@ FeedbackForge is a feedback collection and management tool. Users can create fee
 - DELETE /api/projects/:id - Delete project
 - GET /api/projects/:id/responses - Responses for a project
 - GET /api/responses - All responses
+- GET /api/responses/:id - Single response with question labels and project name
 - GET /api/forms/:slug - Get form by slug (public)
 - POST /api/forms/:slug/submit - Submit feedback (public)
 - POST /api/widget/:slug/submit - Submit widget feedback (rating, category, message)

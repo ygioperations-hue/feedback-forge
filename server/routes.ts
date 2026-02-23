@@ -176,6 +176,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/responses/:id", async (req, res) => {
+    try {
+      const response = await storage.getResponse(req.params.id);
+      if (!response) return res.status(404).json({ message: "Response not found" });
+      const project = await storage.getProject(response.projectId);
+      res.json({ ...response, projectName: project?.name || "Unknown" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch response" });
+    }
+  });
+
   app.get("/api/forms/:slug", async (req, res) => {
     try {
       const project = await storage.getProjectBySlug(req.params.slug);

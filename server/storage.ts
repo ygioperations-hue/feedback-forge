@@ -39,6 +39,7 @@ export interface IStorage {
   createProject(project: InsertProject, questionsList: InsertQuestion[]): Promise<Project>;
   deleteProject(id: string): Promise<void>;
   getResponses(): Promise<(FeedbackResponse & { answers: Answer[] })[]>;
+  getResponse(id: string): Promise<(FeedbackResponse & { answers: (Answer & { question: Question })[] }) | undefined>;
   getResponsesByProject(projectId: string): Promise<ResponseWithAnswers[]>;
   createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[]): Promise<FeedbackResponse>;
   getOrCreateWidgetQuestions(projectId: string): Promise<{ ratingId: string; categoryId: string; messageId: string }>;
@@ -95,6 +96,24 @@ export class DatabaseStorage implements IStorage {
       ...r,
       answers: allAnswers.filter((a) => a.responseId === r.id),
     }));
+  }
+
+  async getResponse(id: string): Promise<(FeedbackResponse & { answers: (Answer & { question: Question })[] }) | undefined> {
+    const [response] = await db.select().from(responses).where(eq(responses.id, id));
+    if (!response) return undefined;
+    const responseAnswers = await db.select().from(answers).where(eq(answers.responseId, id));
+    const questionIds = responseAnswers.map((a) => a.questionId);
+    const qs = questionIds.length > 0
+      ? await db.select().from(questions)
+      : [];
+    const qMap = new Map(qs.map((q) => [q.id, q]));
+    return {
+      ...response,
+      answers: responseAnswers.map((a) => ({
+        ...a,
+        question: qMap.get(a.questionId) || { id: a.questionId, projectId: response.projectId, label: "Unknown", type: "text", required: false, options: null, order: 0, source: "form" },
+      })),
+    };
   }
 
   async getResponsesByProject(projectId: string): Promise<ResponseWithAnswers[]> {
