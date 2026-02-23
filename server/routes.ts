@@ -4,6 +4,47 @@ import { storage } from "./storage";
 import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRoadmapItemSchema, insertChangelogItemSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
+import rateLimit from "express-rate-limit";
+
+const publicSubmitLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many submissions. Please try again in 15 minutes." },
+});
+
+const upvoteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many upvotes. Please try again later." },
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "AI summary limit reached. Please try again in an hour." },
+});
+
+const ltdRedeemLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many redemption attempts. Please try again later." },
+});
+
+const ltdGenerateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many code generation requests. Please try again later." },
+});
 
 const createProjectBodySchema = z.object({
   project: insertProjectSchema,
@@ -111,7 +152,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/forms/:slug/submit", async (req, res) => {
+  app.post("/api/forms/:slug/submit", publicSubmitLimiter, async (req: any, res) => {
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Form not found" });
@@ -150,7 +191,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/widget/:slug/submit", async (req, res) => {
+  app.post("/api/widget/:slug/submit", publicSubmitLimiter, async (req: any, res) => {
     try {
       const project = await storage.getProjectBySlug(req.params.slug);
       if (!project) return res.status(404).json({ message: "Project not found" });
@@ -220,7 +261,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/roadmap/items/:id/upvote", async (req, res) => {
+  app.post("/api/roadmap/items/:id/upvote", upvoteLimiter, async (req: any, res) => {
     try {
       const item = await storage.upvoteRoadmapItem(req.params.id);
       if (!item) return res.status(404).json({ message: "Item not found" });
@@ -230,7 +271,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ai/summary", async (_req, res) => {
+  app.post("/api/ai/summary", aiLimiter, async (_req, res) => {
     try {
       const allProjects = await storage.getProjects();
       const ltdCodes = await storage.getLtdCodes();
@@ -342,7 +383,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ltd/generate", async (_req, res) => {
+  app.post("/api/ltd/generate", ltdGenerateLimiter, async (_req, res) => {
     try {
       const code = await storage.generateLtdCode();
       res.status(201).json(code);
@@ -351,7 +392,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ltd/redeem", async (req, res) => {
+  app.post("/api/ltd/redeem", ltdRedeemLimiter, async (req, res) => {
     try {
       const schema = z.object({ code: z.string().min(1) });
       const parsed = schema.safeParse(req.body);
