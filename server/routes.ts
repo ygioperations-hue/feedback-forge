@@ -46,24 +46,44 @@ const ltdGenerateLimiter = rateLimit({
   message: { message: "Too many code generation requests. Please try again later." },
 });
 
+function stripHtml(input: string): string {
+  return input
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, "")
+    .replace(/javascript\s*:/gi, "")
+    .trim();
+}
+
+function sanitize(val: string): string {
+  return stripHtml(val);
+}
+
+const MAX_NAME_LENGTH = 200;
+const MAX_EMAIL_LENGTH = 320;
+const MAX_ANSWER_LENGTH = 5000;
+const MAX_MESSAGE_LENGTH = 5000;
+const MAX_ANSWERS_PER_SUBMISSION = 50;
+
 const createProjectBodySchema = z.object({
   project: insertProjectSchema,
   questions: z.array(z.object({
-    label: z.string().min(1),
+    label: z.string().min(1).max(500),
     type: z.enum(["rating", "text", "multiple_choice"]),
     required: z.boolean().default(true),
-    options: z.array(z.string()).optional().default([]),
+    options: z.array(z.string().max(500)).max(50).optional().default([]),
     order: z.number().int().min(0).default(0),
-  })).default([]),
+  })).max(50).default([]),
 });
 
 const submitFormBodySchema = z.object({
-  respondentName: z.string().nullable().optional(),
-  respondentEmail: z.string().email().nullable().optional().or(z.literal("").transform(() => null)),
+  respondentName: z.string().max(MAX_NAME_LENGTH).nullable().optional(),
+  respondentEmail: z.string().max(MAX_EMAIL_LENGTH).email().nullable().optional().or(z.literal("").transform(() => null)),
   answers: z.array(z.object({
-    questionId: z.string().min(1),
-    value: z.string().min(1),
-  })),
+    questionId: z.string().min(1).max(100),
+    value: z.string().min(1).max(MAX_ANSWER_LENGTH),
+  })).min(1).max(MAX_ANSWERS_PER_SUBMISSION),
 });
 
 export async function registerRoutes(
@@ -164,9 +184,21 @@ export async function registerRoutes(
 
       const { respondentName, respondentEmail, answers } = parsed.data;
 
+      const sanitizedName = respondentName ? sanitize(respondentName) : null;
+      const sanitizedAnswers = answers.map((a) => ({
+        questionId: a.questionId,
+        value: sanitize(a.value),
+      }));
+
+      const validQuestionIds = new Set(project.questions.map((q) => q.id));
+      const invalidAnswers = sanitizedAnswers.filter((a) => !validQuestionIds.has(a.questionId));
+      if (invalidAnswers.length > 0) {
+        return res.status(400).json({ message: "Invalid question ID in submission" });
+      }
+
       const requiredQuestions = project.questions.filter((q) => q.required);
       for (const rq of requiredQuestions) {
-        const answer = answers.find((a) => a.questionId === rq.id);
+        const answer = sanitizedAnswers.find((a) => a.questionId === rq.id);
         if (!answer || !answer.value || answer.value.trim() === "") {
           return res.status(400).json({ message: `Answer for "${rq.label}" is required` });
         }
@@ -181,8 +213,8 @@ export async function registerRoutes(
       }
 
       const response = await storage.createResponse(
-        { projectId: project.id, respondentName: respondentName || null, respondentEmail: respondentEmail || null },
-        answers.map((a) => ({ questionId: a.questionId, value: a.value }))
+        { projectId: project.id, respondentName: sanitizedName || null, respondentEmail: respondentEmail || null },
+        sanitizedAnswers
       );
 
       res.status(201).json(response);
@@ -207,9 +239,9 @@ export async function registerRoutes(
       const widgetSchema = z.object({
         rating: z.number().int().min(1).max(5),
         category: z.enum(["Bug", "Feature", "Idea", "Other"]),
-        message: z.string().min(1),
-        name: z.string().optional(),
-        email: z.string().email().optional().or(z.literal("")),
+        message: z.string().min(1).max(MAX_MESSAGE_LENGTH),
+        name: z.string().max(MAX_NAME_LENGTH).optional(),
+        email: z.string().max(MAX_EMAIL_LENGTH).email().optional().or(z.literal("")),
       });
 
       const parsed = widgetSchema.safeParse(req.body);
@@ -218,14 +250,21 @@ export async function registerRoutes(
       }
 
       const { rating, category, message, name, email } = parsed.data;
+      const sanitizedMessage = sanitize(message);
+      const sanitizedName = name ? sanitize(name) : null;
+
+      if (!sanitizedMessage) {
+        return res.status(400).json({ message: "Message cannot be empty" });
+      }
+
       const qIds = await storage.getOrCreateWidgetQuestions(project.id);
 
       const response = await storage.createResponse(
-        { projectId: project.id, respondentName: name?.trim() || null, respondentEmail: email?.trim() || null },
+        { projectId: project.id, respondentName: sanitizedName || null, respondentEmail: email?.trim() || null },
         [
           { questionId: qIds.ratingId, value: String(rating) },
           { questionId: qIds.categoryId, value: category },
-          { questionId: qIds.messageId, value: message },
+          { questionId: qIds.messageId, value: sanitizedMessage },
         ]
       );
 
