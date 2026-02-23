@@ -1,7 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import {
+  organizations,
+  users,
   projects,
   questions,
   responses,
@@ -9,6 +11,10 @@ import {
   roadmapItems,
   changelogItems,
   ltdCodes,
+  type Organization,
+  type InsertOrganization,
+  type User,
+  type InsertUser,
   type Project,
   type InsertProject,
   type Question,
@@ -33,13 +39,20 @@ const pool = new pg.Pool({
 export const db = drizzle(pool);
 
 export interface IStorage {
-  getProjects(): Promise<Project[]>;
+  createOrganization(org: InsertOrganization): Promise<Organization>;
+  getOrganization(id: string): Promise<Organization | undefined>;
+  getOrganizationBySlug(slug: string): Promise<Organization | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserById(id: string): Promise<User | undefined>;
+
+  getProjects(orgId: string): Promise<Project[]>;
   getProject(id: string): Promise<ProjectWithQuestions | undefined>;
   getProjectBySlug(slug: string): Promise<ProjectWithQuestions | undefined>;
   createProject(project: InsertProject, questionsList: InsertQuestion[]): Promise<Project>;
   deleteProject(id: string): Promise<void>;
   updateProjectStatus(id: string, status: string): Promise<Project | undefined>;
-  getResponses(): Promise<(FeedbackResponse & { answers: Answer[] })[]>;
+  getResponses(orgId: string): Promise<(FeedbackResponse & { answers: Answer[] })[]>;
   getResponse(id: string): Promise<(FeedbackResponse & { answers: (Answer & { question: Question })[] }) | undefined>;
   getResponsesByProject(projectId: string): Promise<ResponseWithAnswers[]>;
   createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[]): Promise<FeedbackResponse>;
@@ -49,17 +62,47 @@ export interface IStorage {
   upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
   getChangelogByProject(projectId: string): Promise<ChangelogItem[]>;
   createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem>;
-  generateLtdCode(): Promise<LtdCode>;
-  getLtdCodes(): Promise<LtdCode[]>;
-  redeemLtdCode(code: string): Promise<LtdCode | null>;
+  generateLtdCode(orgId: string): Promise<LtdCode>;
+  getLtdCodes(orgId: string): Promise<LtdCode[]>;
+  redeemLtdCode(code: string, orgId: string): Promise<LtdCode | null>;
   getResponseCountByProject(projectId: string): Promise<number>;
-  getProjectCount(): Promise<number>;
-  upgradeAllProjectsToLifetime(): Promise<void>;
+  getProjectCount(orgId: string): Promise<number>;
+  upgradeAllProjectsToLifetime(orgId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getProjects(): Promise<Project[]> {
-    return db.select().from(projects).orderBy(projects.createdAt);
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
+    const [created] = await db.insert(organizations).values(org).returning();
+    return created;
+  }
+
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org;
+  }
+
+  async getOrganizationBySlug(slug: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+    return org;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [created] = await db.insert(users).values(user).returning();
+    return created;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getProjects(orgId: string): Promise<Project[]> {
+    return db.select().from(projects).where(eq(projects.organizationId, orgId)).orderBy(projects.createdAt);
   }
 
   async getProject(id: string): Promise<ProjectWithQuestions | undefined> {
@@ -95,8 +138,11 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getResponses(): Promise<(FeedbackResponse & { answers: Answer[] })[]> {
-    const allResponses = await db.select().from(responses).orderBy(responses.submittedAt);
+  async getResponses(orgId: string): Promise<(FeedbackResponse & { answers: Answer[] })[]> {
+    const orgProjects = await db.select({ id: projects.id }).from(projects).where(eq(projects.organizationId, orgId));
+    const projectIds = orgProjects.map((p) => p.id);
+    if (projectIds.length === 0) return [];
+    const allResponses = await db.select().from(responses).where(inArray(responses.projectId, projectIds)).orderBy(responses.submittedAt);
     const allAnswers = await db.select().from(answers);
     return allResponses.map((r) => ({
       ...r,
@@ -221,20 +267,20 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async generateLtdCode(): Promise<LtdCode> {
+  async generateLtdCode(orgId: string): Promise<LtdCode> {
     const code = "FF-" + Array.from({ length: 3 }, () => Math.random().toString(36).substring(2, 6).toUpperCase()).join("-");
-    const [created] = await db.insert(ltdCodes).values({ code }).returning();
+    const [created] = await db.insert(ltdCodes).values({ code, organizationId: orgId }).returning();
     return created;
   }
 
-  async getLtdCodes(): Promise<LtdCode[]> {
-    return db.select().from(ltdCodes).orderBy(ltdCodes.createdAt);
+  async getLtdCodes(orgId: string): Promise<LtdCode[]> {
+    return db.select().from(ltdCodes).where(eq(ltdCodes.organizationId, orgId)).orderBy(ltdCodes.createdAt);
   }
 
-  async redeemLtdCode(code: string): Promise<LtdCode | null> {
+  async redeemLtdCode(code: string, orgId: string): Promise<LtdCode | null> {
     const [existing] = await db.select().from(ltdCodes).where(eq(ltdCodes.code, code));
     if (!existing || existing.isRedeemed) return null;
-    const [updated] = await db.update(ltdCodes).set({ isRedeemed: true, redeemedAt: new Date() }).where(eq(ltdCodes.id, existing.id)).returning();
+    const [updated] = await db.update(ltdCodes).set({ isRedeemed: true, redeemedAt: new Date(), organizationId: orgId }).where(eq(ltdCodes.id, existing.id)).returning();
     return updated;
   }
 
@@ -243,13 +289,13 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async getProjectCount(): Promise<number> {
-    const result = await db.select().from(projects);
+  async getProjectCount(orgId: string): Promise<number> {
+    const result = await db.select().from(projects).where(eq(projects.organizationId, orgId));
     return result.length;
   }
 
-  async upgradeAllProjectsToLifetime(): Promise<void> {
-    await db.update(projects).set({ plan: "lifetime" });
+  async upgradeAllProjectsToLifetime(orgId: string): Promise<void> {
+    await db.update(projects).set({ plan: "lifetime" }).where(eq(projects.organizationId, orgId));
   }
 }
 

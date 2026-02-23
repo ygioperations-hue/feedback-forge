@@ -1,5 +1,6 @@
-import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, CreditCard } from "lucide-react";
+import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, CreditCard, LogOut, Building2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { useAuth } from "@/lib/auth";
 import {
   Sidebar,
   SidebarContent,
@@ -12,6 +13,7 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -23,6 +25,7 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user, organization, logout, isLoggingOut } = useAuth();
 
   return (
     <Sidebar>
@@ -33,7 +36,11 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-semibold tracking-tight" data-testid="text-app-name">FeedbackForge</span>
-            <span className="text-xs text-muted-foreground">Collect & Analyze</span>
+            {organization && (
+              <span className="text-xs text-muted-foreground truncate max-w-[140px]" data-testid="text-org-name">
+                {organization.name}
+              </span>
+            )}
           </div>
         </Link>
       </SidebarHeader>
@@ -59,8 +66,24 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
-        <p className="text-xs text-muted-foreground">FeedbackForge v1.0</p>
+      <SidebarFooter className="p-4 space-y-3">
+        {user && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Building2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate" data-testid="text-user-email">{user.email}</span>
+          </div>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          onClick={logout}
+          disabled={isLoggingOut}
+          data-testid="button-logout"
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          Sign Out
+        </Button>
       </SidebarFooter>
     </Sidebar>
   );

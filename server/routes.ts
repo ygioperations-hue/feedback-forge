@@ -1,10 +1,15 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRoadmapItemSchema, insertChangelogItemSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
 import rateLimit from "express-rate-limit";
+import { requireAuth, hashPassword, verifyPassword } from "./auth";
+
+function p(val: string | string[]): string {
+  return Array.isArray(val) ? val[0] : val;
+}
 
 function widgetCors(req: Request, res: Response, next: NextFunction) {
   const origin = req.headers.origin;
@@ -60,6 +65,14 @@ const ltdGenerateLimiter = rateLimit({
   message: { message: "Too many code generation requests. Please try again later." },
 });
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many attempts. Please try again later." },
+});
+
 function stripHtml(input: string): string {
   return input
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -100,36 +113,167 @@ const submitFormBodySchema = z.object({
   })).min(1).max(MAX_ANSWERS_PER_SUBMISSION),
 });
 
+const signupSchema = z.object({
+  companyName: z.string().min(2).max(100),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  email: z.string().email().max(320),
+  password: z.string().min(8).max(128),
+});
+
+const loginSchema = z.object({
+  email: z.string().email().max(320),
+  password: z.string().min(1).max(128),
+});
+
+function generateOrgSlug(companyName: string): string {
+  return companyName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .substring(0, 50);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/projects", async (_req, res) => {
+  app.post("/api/auth/signup", authLimiter, async (req, res) => {
     try {
-      const projects = await storage.getProjects();
+      const parsed = signupSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+
+      const { companyName, firstName, lastName, email, password } = parsed.data;
+
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+
+      let slug = generateOrgSlug(companyName);
+      const existingOrg = await storage.getOrganizationBySlug(slug);
+      if (existingOrg) {
+        slug = slug + "-" + Math.random().toString(36).substring(2, 6);
+      }
+
+      const org = await storage.createOrganization({ name: sanitize(companyName), slug });
+      const hashedPassword = await hashPassword(password);
+      const user = await storage.createUser({
+        email: email.toLowerCase().trim(),
+        password: hashedPassword,
+        firstName: sanitize(firstName),
+        lastName: sanitize(lastName),
+        role: "admin",
+        organizationId: org.id,
+      });
+
+      req.session.userId = user.id;
+      req.session.organizationId = org.id;
+
+      res.status(201).json({
+        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+        organization: { id: org.id, name: org.name, slug: org.slug },
+      });
+    } catch (err: any) {
+      if (err?.code === "23505") {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+      console.error("Signup error:", err);
+      res.status(500).json({ message: "Failed to create account" });
+    }
+  });
+
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
+    try {
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+
+      const { email, password } = parsed.data;
+      const user = await storage.getUserByEmail(email.toLowerCase().trim());
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      const valid = await verifyPassword(password, user.password);
+      if (!valid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      const org = await storage.getOrganization(user.organizationId);
+
+      req.session.userId = user.id;
+      req.session.organizationId = user.organizationId;
+
+      res.json({
+        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+        organization: org ? { id: org.id, name: org.name, slug: org.slug } : null,
+      });
+    } catch (err) {
+      console.error("Login error:", err);
+      res.status(500).json({ message: "Failed to log in" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Failed to log out" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ ok: true });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    if (!req.session.userId || !req.session.organizationId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const org = await storage.getOrganization(req.session.organizationId);
+    res.json({
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+      organization: org ? { id: org.id, name: org.name, slug: org.slug } : null,
+    });
+  });
+
+  app.get("/api/projects", requireAuth, async (req, res) => {
+    try {
+      const projects = await storage.getProjects(req.session.organizationId!);
       res.json(projects);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch projects" });
     }
   });
 
-  app.get("/api/projects/:id", async (req, res) => {
+  app.get("/api/projects/:id", requireAuth, async (req, res) => {
     try {
-      const project = await storage.getProject(req.params.id);
-      if (!project) return res.status(404).json({ message: "Project not found" });
+      const project = await storage.getProject(p(req.params.id));
+      if (!project || project.organizationId !== req.session.organizationId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       res.json(project);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch project" });
     }
   });
 
-  app.post("/api/projects", async (req, res) => {
+  app.post("/api/projects", requireAuth, async (req, res) => {
     try {
-      const allProjects = await storage.getProjects();
-      const ltdCodes = await storage.getLtdCodes();
-      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
-      const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
+      const orgId = req.session.organizationId!;
+      const allProjects = await storage.getProjects(orgId);
+      const orgLtdCodes = await storage.getLtdCodes(orgId);
+      const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
+      const hasLifetime = allProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
       if (!hasLifetime && !hasRedeemedCode) {
         return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
       }
@@ -139,7 +283,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
       }
       const { project, questions } = parsed.data;
-      const created = await storage.createProject(project, questions.map((q) => ({ ...q, projectId: "" })));
+      const created = await storage.createProject(
+        { ...project, organizationId: orgId },
+        questions.map((q) => ({ ...q, projectId: "" }))
+      );
       res.status(201).json(created);
     } catch (err: any) {
       if (err?.code === "23505") {
@@ -149,52 +296,66 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/projects/:id/status", async (req, res) => {
+  app.patch("/api/projects/:id/status", requireAuth, async (req, res) => {
     try {
+      const project = await storage.getProject(p(req.params.id));
+      if (!project || project.organizationId !== req.session.organizationId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       const { status } = req.body;
       if (status !== "active" && status !== "draft") {
         return res.status(400).json({ message: "Status must be 'active' or 'draft'" });
       }
-      const updated = await storage.updateProjectStatus(req.params.id, status);
-      if (!updated) return res.status(404).json({ message: "Project not found" });
+      const updated = await storage.updateProjectStatus(p(req.params.id), status);
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to update project status" });
     }
   });
 
-  app.delete("/api/projects/:id", async (req, res) => {
+  app.delete("/api/projects/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteProject(req.params.id);
+      const project = await storage.getProject(p(req.params.id));
+      if (!project || project.organizationId !== req.session.organizationId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      await storage.deleteProject(p(req.params.id));
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to delete project" });
     }
   });
 
-  app.get("/api/projects/:id/responses", async (req, res) => {
+  app.get("/api/projects/:id/responses", requireAuth, async (req, res) => {
     try {
-      const responses = await storage.getResponsesByProject(req.params.id);
+      const project = await storage.getProject(p(req.params.id));
+      if (!project || project.organizationId !== req.session.organizationId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      const projectResponses = await storage.getResponsesByProject(p(req.params.id));
+      res.json(projectResponses);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch responses" });
+    }
+  });
+
+  app.get("/api/responses", requireAuth, async (req, res) => {
+    try {
+      const responses = await storage.getResponses(req.session.organizationId!);
       res.json(responses);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch responses" });
     }
   });
 
-  app.get("/api/responses", async (_req, res) => {
+  app.get("/api/responses/:id", requireAuth, async (req, res) => {
     try {
-      const responses = await storage.getResponses();
-      res.json(responses);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to fetch responses" });
-    }
-  });
-
-  app.get("/api/responses/:id", async (req, res) => {
-    try {
-      const response = await storage.getResponse(req.params.id);
+      const response = await storage.getResponse(p(req.params.id));
       if (!response) return res.status(404).json({ message: "Response not found" });
       const project = await storage.getProject(response.projectId);
+      if (!project || project.organizationId !== req.session.organizationId) {
+        return res.status(404).json({ message: "Response not found" });
+      }
       res.json({ ...response, projectName: project?.name || "Unknown" });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch response" });
@@ -203,7 +364,7 @@ export async function registerRoutes(
 
   app.get("/api/forms/:slug", async (req, res) => {
     try {
-      const project = await storage.getProjectBySlug(req.params.slug);
+      const project = await storage.getProjectBySlug(p(req.params.slug));
       if (!project) return res.status(404).json({ message: "Form not found" });
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
       res.json({
@@ -217,7 +378,7 @@ export async function registerRoutes(
 
   app.post("/api/forms/:slug/submit", publicSubmitLimiter, async (req: any, res) => {
     try {
-      const project = await storage.getProjectBySlug(req.params.slug);
+      const project = await storage.getProjectBySlug(p(req.params.slug));
       if (!project) return res.status(404).json({ message: "Form not found" });
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
 
@@ -248,12 +409,14 @@ export async function registerRoutes(
         }
       }
 
-      const allProjects = await storage.getProjects();
-      const ltdCodes = await storage.getLtdCodes();
-      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
-      const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
-      if (!hasLifetime && !hasRedeemedCode) {
-        return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
+      if (project.organizationId) {
+        const orgProjects = await storage.getProjects(project.organizationId);
+        const orgLtdCodes = await storage.getLtdCodes(project.organizationId);
+        const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
+        const hasLifetime = orgProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
+        if (!hasLifetime && !hasRedeemedCode) {
+          return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
+        }
       }
 
       const response = await storage.createResponse(
@@ -270,16 +433,18 @@ export async function registerRoutes(
   app.options("/api/widget/:slug/submit", widgetCors);
   app.post("/api/widget/:slug/submit", widgetCors, publicSubmitLimiter, async (req: any, res) => {
     try {
-      const project = await storage.getProjectBySlug(req.params.slug);
+      const project = await storage.getProjectBySlug(p(req.params.slug));
       if (!project) return res.status(404).json({ message: "Project not found" });
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
 
-      const allProjects = await storage.getProjects();
-      const ltdCodes = await storage.getLtdCodes();
-      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
-      const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
-      if (!hasLifetime && !hasRedeemedCode) {
-        return res.status(403).json({ message: "Account not activated. Feedback collection is paused." });
+      if (project.organizationId) {
+        const orgProjects = await storage.getProjects(project.organizationId);
+        const orgLtdCodes = await storage.getLtdCodes(project.organizationId);
+        const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
+        const hasLifetime = orgProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
+        if (!hasLifetime && !hasRedeemedCode) {
+          return res.status(403).json({ message: "Account not activated. Feedback collection is paused." });
+        }
       }
 
       const widgetSchema = z.object({
@@ -322,7 +487,7 @@ export async function registerRoutes(
 
   app.get("/api/roadmap/:slug", async (req, res) => {
     try {
-      const project = await storage.getProjectBySlug(req.params.slug);
+      const project = await storage.getProjectBySlug(p(req.params.slug));
       if (!project) return res.status(404).json({ message: "Project not found" });
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
       const items = await storage.getRoadmapItemsByProject(project.id);
@@ -332,10 +497,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/roadmap/:slug/items", async (req, res) => {
+  app.post("/api/roadmap/:slug/items", requireAuth, async (req, res) => {
     try {
-      const project = await storage.getProjectBySlug(req.params.slug);
-      if (!project) return res.status(404).json({ message: "Project not found" });
+      const project = await storage.getProjectBySlug(p(req.params.slug));
+      if (!project || project.organizationId !== req.session.organizationId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       const parsed = insertRoadmapItemSchema.pick({ title: true, description: true, status: true, order: true }).safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
@@ -350,7 +517,7 @@ export async function registerRoutes(
   app.options("/api/roadmap/items/:id/upvote", widgetCors);
   app.post("/api/roadmap/items/:id/upvote", widgetCors, upvoteLimiter, async (req: any, res) => {
     try {
-      const item = await storage.upvoteRoadmapItem(req.params.id);
+      const item = await storage.upvoteRoadmapItem(p(req.params.id));
       if (!item) return res.status(404).json({ message: "Item not found" });
       res.json(item);
     } catch (err) {
@@ -358,11 +525,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ai/summary", aiLimiter, async (_req, res) => {
+  app.post("/api/ai/summary", requireAuth, aiLimiter, async (req, res) => {
     try {
-      const allProjects = await storage.getProjects();
-      const ltdCodes = await storage.getLtdCodes();
-      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
+      const orgId = req.session.organizationId!;
+      const allProjects = await storage.getProjects(orgId);
+      const orgLtdCodes = await storage.getLtdCodes(orgId);
+      const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
       const hasLifetime = allProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
       if (!hasLifetime && !hasRedeemedCode) {
         return res.status(403).json({ message: "AI Insights requires an active plan. Upgrade to unlock." });
@@ -374,17 +542,16 @@ export async function registerRoutes(
       }
 
       const openai = new OpenAI({ apiKey });
-      const allResponses = await storage.getResponses();
-      const projects = await storage.getProjects();
+      const allResponses = await storage.getResponses(orgId);
 
       if (allResponses.length === 0) {
         return res.status(400).json({ message: "No feedback responses to analyze" });
       }
 
-      const responses = allResponses.slice(-100);
+      const responsesSlice = allResponses.slice(-100);
 
-      const feedbackText = responses.map((r) => {
-        const project = projects.find((p) => p.id === r.projectId);
+      const feedbackText = responsesSlice.map((r) => {
+        const project = allProjects.find((p) => p.id === r.projectId);
         const answersText = r.answers.map((a) => a.value).join("; ");
         return `[${project?.name || "Unknown"}] ${r.respondentName || "Anonymous"}: ${answersText}`;
       }).join("\n");
@@ -398,7 +565,7 @@ export async function registerRoutes(
           },
           {
             role: "user",
-            content: `Here are ${responses.length} feedback responses across ${projects.length} projects:\n\n${feedbackText}`,
+            content: `Here are ${responsesSlice.length} feedback responses across ${allProjects.length} projects:\n\n${feedbackText}`,
           },
         ],
         response_format: { type: "json_object" },
@@ -416,17 +583,17 @@ export async function registerRoutes(
         topRequests: z.array(z.string()).min(1).max(5),
       });
 
-      let parsed;
+      let parsedAi;
       try {
-        parsed = aiResponseSchema.parse(JSON.parse(content));
+        parsedAi = aiResponseSchema.parse(JSON.parse(content));
       } catch {
         return res.status(500).json({ message: "AI returned an unexpected format. Please try again." });
       }
 
       res.json({
-        ...parsed,
+        ...parsedAi,
         responseCount: allResponses.length,
-        projectCount: projects.length,
+        projectCount: allProjects.length,
         generatedAt: new Date().toISOString(),
       });
     } catch (err: any) {
@@ -437,7 +604,7 @@ export async function registerRoutes(
 
   app.get("/api/changelog/:slug", async (req, res) => {
     try {
-      const project = await storage.getProjectBySlug(req.params.slug);
+      const project = await storage.getProjectBySlug(p(req.params.slug));
       if (!project) return res.status(404).json({ message: "Project not found" });
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
       const items = await storage.getChangelogByProject(project.id);
@@ -447,10 +614,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/changelog/:slug/items", async (req, res) => {
+  app.post("/api/changelog/:slug/items", requireAuth, async (req, res) => {
     try {
-      const project = await storage.getProjectBySlug(req.params.slug);
-      if (!project) return res.status(404).json({ message: "Project not found" });
+      const project = await storage.getProjectBySlug(p(req.params.slug));
+      if (!project || project.organizationId !== req.session.organizationId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       const parsed = insertChangelogItemSchema.pick({ title: true, description: true, type: true }).safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
@@ -462,49 +631,51 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ltd/codes", async (_req, res) => {
+  app.get("/api/ltd/codes", requireAuth, async (req, res) => {
     try {
-      const codes = await storage.getLtdCodes();
+      const codes = await storage.getLtdCodes(req.session.organizationId!);
       res.json(codes);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch LTD codes" });
     }
   });
 
-  app.post("/api/ltd/generate", ltdGenerateLimiter, async (_req, res) => {
+  app.post("/api/ltd/generate", requireAuth, ltdGenerateLimiter, async (req, res) => {
     try {
-      const code = await storage.generateLtdCode();
+      const code = await storage.generateLtdCode(req.session.organizationId!);
       res.status(201).json(code);
     } catch (err) {
       res.status(500).json({ message: "Failed to generate code" });
     }
   });
 
-  app.post("/api/ltd/redeem", ltdRedeemLimiter, async (req, res) => {
+  app.post("/api/ltd/redeem", requireAuth, ltdRedeemLimiter, async (req, res) => {
     try {
       const schema = z.object({ code: z.string().min(1) });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Code is required" });
-      const redeemed = await storage.redeemLtdCode(parsed.data.code);
+      const orgId = req.session.organizationId!;
+      const redeemed = await storage.redeemLtdCode(parsed.data.code, orgId);
       if (!redeemed) return res.status(400).json({ message: "Invalid or already redeemed code" });
-      await storage.upgradeAllProjectsToLifetime();
+      await storage.upgradeAllProjectsToLifetime(orgId);
       res.json(redeemed);
     } catch (err) {
       res.status(500).json({ message: "Failed to redeem code" });
     }
   });
 
-  app.get("/api/limits", async (_req, res) => {
+  app.get("/api/limits", requireAuth, async (req, res) => {
     try {
-      const projectCount = await storage.getProjectCount();
-      const projects = await storage.getProjects();
+      const orgId = req.session.organizationId!;
+      const projectCount = await storage.getProjectCount(orgId);
+      const orgProjects = await storage.getProjects(orgId);
       let totalResponses = 0;
-      for (const p of projects) {
+      for (const p of orgProjects) {
         totalResponses += await storage.getResponseCountByProject(p.id);
       }
-      const ltdCodes = await storage.getLtdCodes();
-      const hasRedeemedCode = ltdCodes.some(c => c.isRedeemed);
-      const hasLifetime = projects.some(p => p.plan === "lifetime" || p.plan === "paid");
+      const orgLtdCodes = await storage.getLtdCodes(orgId);
+      const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
+      const hasLifetime = orgProjects.some(p => p.plan === "lifetime" || p.plan === "paid");
       const activated = hasLifetime || hasRedeemedCode;
       const plan = activated ? "lifetime" : "none";
       res.json({
