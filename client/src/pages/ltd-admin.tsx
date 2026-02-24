@@ -8,6 +8,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Copy, Crown, Check, Key } from "lucide-react";
 import { useState } from "react";
 import type { LtdCode } from "@shared/schema";
+import { PaywallGate } from "@/components/paywall-gate";
 
 export default function LtdAdmin() {
   const { toast } = useToast();
@@ -42,6 +43,7 @@ export default function LtdAdmin() {
   const availableCount = codes?.filter((c) => !c.isRedeemed).length || 0;
 
   return (
+    <PaywallGate>
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
@@ -145,5 +147,6 @@ export default function LtdAdmin() {
         </Card>
       )}
     </div>
+    </PaywallGate>
   );
 }
