@@ -80,12 +80,12 @@ function PaywallScreen() {
         </Card>
 
         <div className="flex flex-col gap-3">
-          <Link href="/pricing">
+          <a href="/#pricing">
             <Button className="w-full" size="lg" data-testid="button-paywall-upgrade">
               <Crown className="w-4 h-4 mr-2" />
               View Plans & Activate
             </Button>
-          </Link>
+          </a>
           <p className="text-xs text-center text-muted-foreground">
             Starting at $29/month or grab a Lifetime Deal
           </p>

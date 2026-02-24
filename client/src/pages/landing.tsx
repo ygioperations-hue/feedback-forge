@@ -415,7 +415,48 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-10">
+          <Card className="max-w-3xl mx-auto mb-10 border-amber-500/30" data-testid="card-ltd-landing">
+            <CardContent className="p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10 shrink-0">
+                    <Crown className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Have a Lifetime Deal code?</h3>
+                    <p className="text-sm text-muted-foreground">Enter your code to unlock unlimited access forever — one payment, no recurring fees</p>
+                  </div>
+                </div>
+                {isAuthenticated ? (
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <Input
+                      placeholder="FF-XXXX-XXXX-XXXX"
+                      value={ltdCode}
+                      onChange={(e) => setLtdCode(e.target.value)}
+                      className="w-48"
+                      data-testid="input-ltd-code-landing"
+                    />
+                    <Button
+                      onClick={() => redeemMutation.mutate()}
+                      disabled={!ltdCode.trim() || redeemMutation.isPending}
+                      data-testid="button-redeem-ltd-landing"
+                    >
+                      {redeemMutation.isPending ? "Redeeming..." : "Redeem"}
+                    </Button>
+                  </div>
+                ) : (
+                  <Link href="/signup">
+                    <Button variant="outline" className="shrink-0" data-testid="button-ltd-signup">
+                      Sign Up to Redeem
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
             {plans.map((plan) => {
               const isSelected = billingPeriod === plan.id;
               return (
@@ -481,49 +522,6 @@ export default function Landing() {
               );
             })}
           </div>
-
-          <Card className="max-w-lg mx-auto border-amber-500/30" data-testid="card-ltd-landing">
-            <CardContent className="p-6 sm:p-8">
-              <div className="flex items-start gap-4">
-                <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-amber-500/10 shrink-0">
-                  <Crown className="w-6 h-6 text-amber-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-lg">Lifetime Deal Available</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    One payment, unlimited access forever. No subscriptions, no recurring fees.
-                  </p>
-                  {isAuthenticated ? (
-                    <div className="flex items-center gap-2 mt-4">
-                      <Input
-                        placeholder="FF-XXXX-XXXX-XXXX"
-                        value={ltdCode}
-                        onChange={(e) => setLtdCode(e.target.value)}
-                        className="max-w-[200px]"
-                        data-testid="input-ltd-code-landing"
-                      />
-                      <Button
-                        onClick={() => redeemMutation.mutate()}
-                        disabled={!ltdCode.trim() || redeemMutation.isPending}
-                        data-testid="button-redeem-ltd-landing"
-                      >
-                        {redeemMutation.isPending ? "Redeeming..." : "Redeem"}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="mt-4">
-                      <Link href="/signup">
-                        <Button variant="outline" size="sm" data-testid="button-ltd-signup">
-                          Sign Up to Redeem
-                          <ArrowRight className="w-4 h-4 ml-2" />
-                        </Button>
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </section>
 
