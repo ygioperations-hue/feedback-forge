@@ -62,6 +62,23 @@ type LimitsData = {
 export default function Pricing() {
   const { toast } = useToast();
   const [ltdCode, setLtdCode] = useState("");
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  const handleCheckout = async (planName: string) => {
+    const plan = planName.toLowerCase() as "monthly" | "yearly";
+    setCheckoutLoading(plan);
+    try {
+      const res = await apiRequest("POST", "/api/billing/checkout", { plan });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      toast({ title: "Checkout failed", description: err.message, variant: "destructive" });
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
 
   const { data: limits } = useQuery<LimitsData>({
     queryKey: ["/api/limits"],
@@ -188,10 +205,11 @@ export default function Pricing() {
                 <Button
                   variant={plan.variant}
                   className="w-full"
-                  disabled={activated}
+                  disabled={activated || checkoutLoading === plan.name.toLowerCase()}
+                  onClick={() => handleCheckout(plan.name)}
                   data-testid={`button-plan-${plan.name.toLowerCase()}`}
                 >
-                  {activated ? "Active" : plan.cta}
+                  {activated ? "Active" : checkoutLoading === plan.name.toLowerCase() ? "Redirecting..." : plan.cta}
                 </Button>
               </CardContent>
             </Card>

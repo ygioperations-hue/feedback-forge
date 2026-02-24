@@ -155,6 +155,27 @@ export default function Landing() {
     }
   }, []);
 
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  const handleCheckout = async (plan: "monthly" | "yearly") => {
+    if (!isAuthenticated) {
+      window.location.href = "/signup";
+      return;
+    }
+    setCheckoutLoading(plan);
+    try {
+      const res = await apiRequest("POST", "/api/billing/checkout", { plan });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      toast({ title: "Checkout failed", description: err.message, variant: "destructive" });
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
   const redeemMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/ltd/redeem", { code: ltdCode.trim() });
@@ -517,17 +538,20 @@ export default function Landing() {
                       ))}
                     </ul>
                     <div className="pt-2">
-                      <Link href={isAuthenticated ? "/dashboard" : "/signup"}>
-                        <Button
-                          variant={isSelected ? "default" : "outline"}
-                          className="w-full"
-                          size="lg"
-                          data-testid={`button-plan-${plan.id}`}
-                        >
-                          Get Started
-                          <ChevronRight className="w-4 h-4 ml-1" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant={isSelected ? "default" : "outline"}
+                        className="w-full"
+                        size="lg"
+                        data-testid={`button-plan-${plan.id}`}
+                        disabled={checkoutLoading === plan.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCheckout(plan.id as "monthly" | "yearly");
+                        }}
+                      >
+                        {checkoutLoading === plan.id ? "Redirecting..." : "Get Started"}
+                        {checkoutLoading !== plan.id && <ChevronRight className="w-4 h-4 ml-1" />}
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

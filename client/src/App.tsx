@@ -22,6 +22,7 @@ import PublicChangelog from "@/pages/public-changelog";
 import Pricing from "@/pages/pricing";
 import LtdAdmin from "@/pages/ltd-admin";
 import Profile from "@/pages/profile";
+import Billing from "@/pages/billing";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
@@ -86,6 +87,9 @@ function Router() {
       </Route>
       <Route path="/profile">
         <AppLayout><Profile /></AppLayout>
+      </Route>
+      <Route path="/billing">
+        <AppLayout><Billing /></AppLayout>
       </Route>
       <Route>
         <AppLayout><NotFound /></AppLayout>

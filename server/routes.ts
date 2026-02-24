@@ -6,6 +6,9 @@ import { z } from "zod";
 import OpenAI from "openai";
 import rateLimit from "express-rate-limit";
 import { requireAuth, hashPassword, verifyPassword } from "./auth";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { sql } from "drizzle-orm";
+import { db } from "./storage";
 
 function p(val: string | string[]): string {
   return Array.isArray(val) ? val[0] : val;
@@ -87,6 +90,16 @@ function sanitize(val: string): string {
   return stripHtml(val);
 }
 
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .substring(0, 60);
+}
+
 const MAX_NAME_LENGTH = 200;
 const MAX_EMAIL_LENGTH = 320;
 const MAX_ANSWER_LENGTH = 5000;
@@ -114,6 +127,7 @@ const submitFormBodySchema = z.object({
 });
 
 const signupSchema = z.object({
+  companyName: z.string().min(1, "Company name is required").max(200),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   email: z.string().email().max(320),
@@ -137,12 +151,24 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
       }
 
-      const { firstName, lastName, email, password } = parsed.data;
+      const { companyName, firstName, lastName, email, password } = parsed.data;
 
       const existingUser = await storage.getUserByEmail(email.toLowerCase().trim());
       if (existingUser) {
         return res.status(400).json({ message: "An account with this email already exists" });
       }
+
+      let slug = generateSlug(companyName);
+      if (!slug) slug = "org-" + Date.now();
+      const existingOrg = await storage.getOrganizationBySlug(slug);
+      if (existingOrg) {
+        slug = slug + "-" + Math.random().toString(36).substring(2, 6);
+      }
+
+      const org = await storage.createOrganization({
+        name: sanitize(companyName),
+        slug,
+      });
 
       const hashedPassword = await hashPassword(password);
       const user = await storage.createUser({
@@ -150,9 +176,12 @@ export async function registerRoutes(
         password: hashedPassword,
         firstName: sanitize(firstName),
         lastName: sanitize(lastName),
+        role: "admin",
+        organizationId: org.id,
       });
 
       req.session.userId = user.id;
+      req.session.organizationId = org.id;
 
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -160,7 +189,8 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to create account" });
         }
         res.status(201).json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+          organization: { id: org.id, name: org.name, slug: org.slug },
         });
       });
     } catch (err: any) {
@@ -191,6 +221,12 @@ export async function registerRoutes(
       }
 
       req.session.userId = user.id;
+      req.session.organizationId = user.organizationId || "";
+
+      let org = null;
+      if (user.organizationId) {
+        org = await storage.getOrganization(user.organizationId);
+      }
 
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -198,7 +234,8 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to log in" });
         }
         res.json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+          organization: org ? { id: org.id, name: org.name, slug: org.slug } : null,
         });
       });
     } catch (err) {
@@ -227,8 +264,14 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Not authenticated" });
     }
 
+    let org = null;
+    if (user.organizationId) {
+      org = await storage.getOrganization(user.organizationId);
+    }
+
     res.json({
-      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+      organization: org ? { id: org.id, name: org.name, slug: org.slug } : null,
     });
   });
 
@@ -303,8 +346,14 @@ export async function registerRoutes(
         parsed.data.lastName.trim()
       );
 
+      let org = null;
+      if (updated.organizationId) {
+        org = await storage.getOrganization(updated.organizationId);
+      }
+
       res.json({
-        user: { id: updated.id, email: updated.email, firstName: updated.firstName, lastName: updated.lastName },
+        user: { id: updated.id, email: updated.email, firstName: updated.firstName, lastName: updated.lastName, role: updated.role },
+        organization: org ? { id: org.id, name: org.name, slug: org.slug } : null,
       });
     } catch (err) {
       console.error("Update profile error:", err);
@@ -345,7 +394,8 @@ export async function registerRoutes(
 
   app.get("/api/projects", requireAuth, async (req, res) => {
     try {
-      const projectsList = await storage.getProjects(req.session.userId!);
+      const orgId = req.session.organizationId!;
+      const projectsList = await storage.getProjects(orgId);
       res.json(projectsList);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch projects" });
@@ -355,7 +405,7 @@ export async function registerRoutes(
   app.get("/api/projects/:id", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(p(req.params.id));
-      if (!project || project.userId !== req.session.userId) {
+      if (!project || project.organizationId !== req.session.organizationId) {
         return res.status(404).json({ message: "Project not found" });
       }
       res.json(project);
@@ -366,12 +416,28 @@ export async function registerRoutes(
 
   app.post("/api/projects", requireAuth, async (req, res) => {
     try {
+      const orgId = req.session.organizationId!;
       const uid = req.session.userId!;
-      const allProjects = await storage.getProjects(uid);
-      const userLtdCodes = await storage.getLtdCodes(uid);
-      const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
+      const allProjects = await storage.getProjects(orgId);
+      const orgLtdCodes = await storage.getLtdCodes(orgId);
+      const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
       const hasLifetime = allProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
-      if (!hasLifetime && !hasRedeemedCode) {
+
+      let hasActiveSubscription = false;
+      const user = await storage.getUserById(uid);
+      if (user?.stripeSubscriptionId) {
+        try {
+          const subResult = await db.execute(
+            sql`SELECT status FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
+          );
+          const sub = subResult.rows[0] as any;
+          if (sub && (sub.status === "active" || sub.status === "trialing")) {
+            hasActiveSubscription = true;
+          }
+        } catch {}
+      }
+
+      if (!hasLifetime && !hasRedeemedCode && !hasActiveSubscription) {
         return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
       }
 
@@ -381,7 +447,7 @@ export async function registerRoutes(
       }
       const { project, questions } = parsed.data;
       const created = await storage.createProject(
-        { ...project, userId: uid },
+        { ...project, userId: uid, organizationId: orgId },
         questions.map((q) => ({ ...q, projectId: "" }))
       );
       res.status(201).json(created);
@@ -396,7 +462,7 @@ export async function registerRoutes(
   app.patch("/api/projects/:id/status", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(p(req.params.id));
-      if (!project || project.userId !== req.session.userId) {
+      if (!project || project.organizationId !== req.session.organizationId) {
         return res.status(404).json({ message: "Project not found" });
       }
       const { status } = req.body;
@@ -413,7 +479,7 @@ export async function registerRoutes(
   app.delete("/api/projects/:id", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(p(req.params.id));
-      if (!project || project.userId !== req.session.userId) {
+      if (!project || project.organizationId !== req.session.organizationId) {
         return res.status(404).json({ message: "Project not found" });
       }
       await storage.deleteProject(p(req.params.id));
@@ -426,7 +492,7 @@ export async function registerRoutes(
   app.get("/api/projects/:id/responses", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(p(req.params.id));
-      if (!project || project.userId !== req.session.userId) {
+      if (!project || project.organizationId !== req.session.organizationId) {
         return res.status(404).json({ message: "Project not found" });
       }
       const projectResponses = await storage.getResponsesByProject(p(req.params.id));
@@ -438,7 +504,8 @@ export async function registerRoutes(
 
   app.get("/api/responses", requireAuth, async (req, res) => {
     try {
-      const allResponses = await storage.getResponses(req.session.userId!);
+      const orgId = req.session.organizationId!;
+      const allResponses = await storage.getResponses(orgId);
       res.json(allResponses);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch responses" });
@@ -450,7 +517,7 @@ export async function registerRoutes(
       const response = await storage.getResponse(p(req.params.id));
       if (!response) return res.status(404).json({ message: "Response not found" });
       const project = await storage.getProject(response.projectId);
-      if (!project || project.userId !== req.session.userId) {
+      if (!project || project.organizationId !== req.session.organizationId) {
         return res.status(404).json({ message: "Response not found" });
       }
       res.json({ ...response, projectName: project?.name || "Unknown" });
@@ -506,11 +573,11 @@ export async function registerRoutes(
         }
       }
 
-      if (project.userId) {
-        const userProjects = await storage.getProjects(project.userId);
-        const userLtdCodes = await storage.getLtdCodes(project.userId);
-        const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-        const hasLifetime = userProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
+      if (project.organizationId) {
+        const orgProjects = await storage.getProjects(project.organizationId);
+        const orgLtdCodes = await storage.getLtdCodes(project.organizationId);
+        const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
+        const hasLifetime = orgProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
         if (!hasLifetime && !hasRedeemedCode) {
           return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
         }
@@ -534,11 +601,11 @@ export async function registerRoutes(
       if (!project) return res.status(404).json({ message: "Project not found" });
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
 
-      if (project.userId) {
-        const userProjects = await storage.getProjects(project.userId);
-        const userLtdCodes = await storage.getLtdCodes(project.userId);
-        const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-        const hasLifetime = userProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
+      if (project.organizationId) {
+        const orgProjects = await storage.getProjects(project.organizationId);
+        const orgLtdCodes = await storage.getLtdCodes(project.organizationId);
+        const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
+        const hasLifetime = orgProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
         if (!hasLifetime && !hasRedeemedCode) {
           return res.status(403).json({ message: "Account not activated. Feedback collection is paused." });
         }
@@ -597,7 +664,7 @@ export async function registerRoutes(
   app.post("/api/roadmap/:slug/items", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProjectBySlug(p(req.params.slug));
-      if (!project || project.userId !== req.session.userId) {
+      if (!project || project.organizationId !== req.session.organizationId) {
         return res.status(404).json({ message: "Project not found" });
       }
       const parsed = insertRoadmapItemSchema.pick({ title: true, description: true, status: true, order: true }).safeParse(req.body);
@@ -624,10 +691,11 @@ export async function registerRoutes(
 
   app.post("/api/ai/summary", requireAuth, aiLimiter, async (req, res) => {
     try {
+      const orgId = req.session.organizationId!;
       const uid = req.session.userId!;
-      const allProjects = await storage.getProjects(uid);
-      const userLtdCodes = await storage.getLtdCodes(uid);
-      const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
+      const allProjects = await storage.getProjects(orgId);
+      const orgLtdCodes = await storage.getLtdCodes(orgId);
+      const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
       const hasLifetime = allProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
       if (!hasLifetime && !hasRedeemedCode) {
         return res.status(403).json({ message: "AI Insights requires an active plan. Upgrade to unlock." });
@@ -639,7 +707,7 @@ export async function registerRoutes(
       }
 
       const openai = new OpenAI({ apiKey });
-      const allResponses = await storage.getResponses(uid);
+      const allResponses = await storage.getResponses(orgId);
 
       if (allResponses.length === 0) {
         return res.status(400).json({ message: "No feedback responses to analyze" });
@@ -714,7 +782,7 @@ export async function registerRoutes(
   app.post("/api/changelog/:slug/items", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProjectBySlug(p(req.params.slug));
-      if (!project || project.userId !== req.session.userId) {
+      if (!project || project.organizationId !== req.session.organizationId) {
         return res.status(404).json({ message: "Project not found" });
       }
       const parsed = insertChangelogItemSchema.pick({ title: true, description: true, type: true }).safeParse(req.body);
@@ -728,9 +796,158 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/billing/config", async (_req, res) => {
+    try {
+      const publishableKey = await getStripePublishableKey();
+      res.json({ publishableKey });
+    } catch (err) {
+      console.error("Failed to get Stripe config:", err);
+      res.status(500).json({ message: "Failed to get payment configuration" });
+    }
+  });
+
+  app.post("/api/billing/checkout", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({ plan: z.enum(["monthly", "yearly"]) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid plan selected" });
+      }
+
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      const stripe = await getUncachableStripeClient();
+
+      let customerId = user.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          name: `${user.firstName} ${user.lastName}`,
+          metadata: { userId: user.id, organizationId: user.organizationId || "" },
+        });
+        await storage.updateUserStripeCustomerId(user.id, customer.id);
+        customerId = customer.id;
+      }
+
+      const pricesResult = await db.execute(
+        sql`SELECT p.id as price_id, p.unit_amount, p.currency, p.recurring, p.metadata
+            FROM stripe.prices p
+            JOIN stripe.products pr ON p.product = pr.id
+            WHERE pr.active = true AND p.active = true`
+      );
+
+      const prices = pricesResult.rows;
+      let targetPrice: any = null;
+
+      for (const price of prices) {
+        const recurring = typeof price.recurring === 'string' ? JSON.parse(price.recurring) : price.recurring;
+
+        if (parsed.data.plan === "monthly" && recurring?.interval === "month") {
+          targetPrice = price;
+          break;
+        }
+        if (parsed.data.plan === "yearly" && recurring?.interval === "year") {
+          targetPrice = price;
+          break;
+        }
+      }
+
+      if (!targetPrice) {
+        return res.status(400).json({ message: "No price found for selected plan. Please try again later." });
+      }
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        line_items: [{ price: targetPrice.price_id, quantity: 1 }],
+        mode: 'subscription',
+        success_url: `${baseUrl}/billing?success=true`,
+        cancel_url: `${baseUrl}/#pricing`,
+        metadata: { userId: user.id, plan: parsed.data.plan },
+      });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("Checkout error:", err?.message);
+      res.status(500).json({ message: "Failed to create checkout session" });
+    }
+  });
+
+  app.get("/api/billing/status", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      if (!user.stripeSubscriptionId) {
+        return res.json({ subscription: null });
+      }
+
+      const subResult = await db.execute(
+        sql`SELECT * FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
+      );
+
+      const subscription = subResult.rows[0] || null;
+      if (!subscription) {
+        return res.json({ subscription: null });
+      }
+
+      res.json({ subscription });
+    } catch (err) {
+      console.error("Billing status error:", err);
+      res.status(500).json({ message: "Failed to fetch billing status" });
+    }
+  });
+
+  app.get("/api/billing/history", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      if (!user.stripeCustomerId) {
+        return res.json({ payments: [] });
+      }
+
+      const paymentsResult = await db.execute(
+        sql`SELECT * FROM stripe.payment_intents
+            WHERE customer = ${user.stripeCustomerId}
+            ORDER BY created DESC
+            LIMIT 50`
+      );
+
+      res.json({ payments: paymentsResult.rows });
+    } catch (err) {
+      console.error("Payment history error:", err);
+      res.status(500).json({ message: "Failed to fetch payment history" });
+    }
+  });
+
+  app.post("/api/billing/portal", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user || !user.stripeCustomerId) {
+        return res.status(400).json({ message: "No billing account found" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: `${baseUrl}/billing`,
+      });
+
+      res.json({ url: portalSession.url });
+    } catch (err) {
+      console.error("Portal error:", err);
+      res.status(500).json({ message: "Failed to create billing portal session" });
+    }
+  });
+
   app.get("/api/ltd/codes", requireAuth, async (req, res) => {
     try {
-      const codes = await storage.getLtdCodes(req.session.userId!);
+      const orgId = req.session.organizationId!;
+      const codes = await storage.getLtdCodes(orgId);
       res.json(codes);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch LTD codes" });
@@ -739,7 +956,9 @@ export async function registerRoutes(
 
   app.post("/api/ltd/generate", requireAuth, ltdGenerateLimiter, async (req, res) => {
     try {
-      const code = await storage.generateLtdCode(req.session.userId!);
+      const orgId = req.session.organizationId!;
+      const uid = req.session.userId!;
+      const code = await storage.generateLtdCode(orgId, uid);
       res.status(201).json(code);
     } catch (err) {
       res.status(500).json({ message: "Failed to generate code" });
@@ -751,10 +970,11 @@ export async function registerRoutes(
       const schema = z.object({ code: z.string().min(1) });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Code is required" });
+      const orgId = req.session.organizationId!;
       const uid = req.session.userId!;
-      const redeemed = await storage.redeemLtdCode(parsed.data.code, uid);
+      const redeemed = await storage.redeemLtdCode(parsed.data.code, orgId, uid);
       if (!redeemed) return res.status(400).json({ message: "Invalid or already redeemed code" });
-      await storage.upgradeAllProjectsToLifetime(uid);
+      await storage.upgradeAllProjectsToLifetime(orgId);
       res.json(redeemed);
     } catch (err) {
       res.status(500).json({ message: "Failed to redeem code" });
@@ -763,18 +983,45 @@ export async function registerRoutes(
 
   app.get("/api/limits", requireAuth, async (req, res) => {
     try {
+      const orgId = req.session.organizationId!;
       const uid = req.session.userId!;
-      const projectCount = await storage.getProjectCount(uid);
-      const userProjects = await storage.getProjects(uid);
+      const user = await storage.getUserById(uid);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      const projectCount = await storage.getProjectCount(orgId);
+      const orgProjects = await storage.getProjects(orgId);
       let totalResponses = 0;
-      for (const proj of userProjects) {
+      for (const proj of orgProjects) {
         totalResponses += await storage.getResponseCountByProject(proj.id);
       }
-      const userLtdCodes = await storage.getLtdCodes(uid);
-      const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-      const hasLifetime = userProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
-      const activated = hasLifetime || hasRedeemedCode;
-      const plan = activated ? "lifetime" : "none";
+      const orgLtdCodes = await storage.getLtdCodes(orgId);
+      const hasRedeemedCode = orgLtdCodes.some(c => c.isRedeemed);
+      const hasLifetime = orgProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
+
+      let hasActiveSubscription = false;
+      let subscriptionPlan = "none";
+      if (user.stripeSubscriptionId) {
+        try {
+          const subResult = await db.execute(
+            sql`SELECT status, items FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
+          );
+          const sub = subResult.rows[0] as any;
+          if (sub && (sub.status === "active" || sub.status === "trialing")) {
+            hasActiveSubscription = true;
+            const items = typeof sub.items === 'string' ? JSON.parse(sub.items) : sub.items;
+            const priceData = items?.data?.[0]?.price;
+            const recurring = priceData?.recurring;
+            if (recurring?.interval === "year") {
+              subscriptionPlan = "yearly";
+            } else {
+              subscriptionPlan = "monthly";
+            }
+          }
+        } catch {}
+      }
+
+      const activated = hasLifetime || hasRedeemedCode || hasActiveSubscription;
+      const plan = hasLifetime || hasRedeemedCode ? "lifetime" : hasActiveSubscription ? subscriptionPlan : "none";
       res.json({
         plan,
         activated,

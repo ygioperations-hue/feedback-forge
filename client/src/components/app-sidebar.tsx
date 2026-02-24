@@ -1,4 +1,4 @@
-import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User } from "lucide-react";
+import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User, CreditCard, Building2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
@@ -19,67 +19,70 @@ const navItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderPlus },
   { title: "Responses", url: "/responses", icon: MessageSquareText },
+  { title: "Billing", url: "/billing", icon: CreditCard },
   { title: "LTD Codes", url: "/ltd-admin", icon: Crown },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, logout, isLoggingOut } = useAuth();
+  const { user, organization, logout, isLoggingOut } = useAuth();
 
   return (
-    <Sidebar>
-      <SidebarHeader className="p-4">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
+    <Sidebar data-testid="sidebar-nav">
+      <SidebarHeader className="p-4 border-b">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary shrink-0">
             <MessageSquareText className="w-4 h-4 text-primary-foreground" />
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold tracking-tight" data-testid="text-app-name">FeedbackForge</span>
-            <span className="text-xs text-muted-foreground">Collect & Analyze</span>
+          <div className="min-w-0">
+            <span className="text-sm font-semibold tracking-tight block truncate" data-testid="text-sidebar-brand">FeedbackForge</span>
+            {organization && (
+              <span className="text-xs text-muted-foreground block truncate" data-testid="text-sidebar-org">
+                <Building2 className="w-3 h-3 inline mr-1" />
+                {organization.name}
+              </span>
+            )}
           </div>
-        </Link>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive = location === item.url || (item.url !== "/" && location.startsWith(item.url));
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
-                        <item.icon className="w-4 h-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+              {navItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4 space-y-3">
+      <SidebarFooter className="p-3 border-t space-y-2">
         {user && (
-          <Link href="/profile" className="flex items-center gap-2 text-sm hover:text-foreground transition-colors cursor-pointer" data-testid="link-profile">
-            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 shrink-0">
-              <User className="w-3.5 h-3.5 text-primary" />
+          <Link href="/profile">
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer transition-colors" data-testid="link-profile">
+              <User className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-sm truncate" data-testid="text-sidebar-user">{user.firstName} {user.lastName}</span>
             </div>
-            <span className="truncate font-medium" data-testid="text-user-name">{user.firstName} {user.lastName}</span>
           </Link>
         )}
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          className="w-full justify-start text-muted-foreground"
           onClick={logout}
           disabled={isLoggingOut}
           data-testid="button-logout"
         >
           <LogOut className="w-4 h-4 mr-2" />
-          Sign Out
+          {isLoggingOut ? "Signing out..." : "Sign out"}
         </Button>
       </SidebarFooter>
     </Sidebar>
