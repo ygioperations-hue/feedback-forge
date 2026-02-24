@@ -286,6 +286,63 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/auth/profile", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        firstName: z.string().min(1, "First name is required").max(100),
+        lastName: z.string().min(1, "Last name is required").max(100),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+
+      const updated = await storage.updateUserProfile(
+        req.session.userId!,
+        parsed.data.firstName.trim(),
+        parsed.data.lastName.trim()
+      );
+
+      res.json({
+        user: { id: updated.id, email: updated.email, firstName: updated.firstName, lastName: updated.lastName },
+      });
+    } catch (err) {
+      console.error("Update profile error:", err);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  app.patch("/api/auth/password", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        currentPassword: z.string().min(1, "Current password is required"),
+        newPassword: z.string().min(8, "New password must be at least 8 characters").max(128),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const valid = await verifyPassword(parsed.data.currentPassword, user.password);
+      if (!valid) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      const hashedPassword = await hashPassword(parsed.data.newPassword);
+      await storage.updateUserPassword(user.id, hashedPassword);
+
+      res.json({ message: "Password updated successfully" });
+    } catch (err) {
+      console.error("Change password error:", err);
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
   app.get("/api/projects", requireAuth, async (req, res) => {
     try {
       const projectsList = await storage.getProjects(req.session.userId!);

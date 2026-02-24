@@ -40,6 +40,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
   updateUserPassword(id: string, hashedPassword: string): Promise<void>;
+  updateUserProfile(id: string, firstName: string, lastName: string): Promise<User>;
   setResetToken(userId: string, token: string, expiry: Date): Promise<void>;
   getUserByResetToken(token: string): Promise<User | undefined>;
   clearResetToken(userId: string): Promise<void>;
@@ -86,6 +87,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserPassword(id: string, hashedPassword: string): Promise<void> {
     await db.update(users).set({ password: hashedPassword }).where(eq(users.id, id));
+  }
+
+  async updateUserProfile(id: string, firstName: string, lastName: string): Promise<User> {
+    const [updated] = await db.update(users).set({ firstName, lastName }).where(eq(users.id, id)).returning();
+    return updated;
   }
 
   async setResetToken(userId: string, token: string, expiry: Date): Promise<void> {

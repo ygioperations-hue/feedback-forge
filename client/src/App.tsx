@@ -21,6 +21,7 @@ import PublicRoadmap from "@/pages/public-roadmap";
 import PublicChangelog from "@/pages/public-changelog";
 import Pricing from "@/pages/pricing";
 import LtdAdmin from "@/pages/ltd-admin";
+import Profile from "@/pages/profile";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
@@ -82,6 +83,9 @@ function Router() {
       </Route>
       <Route path="/ltd-admin">
         <AppLayout><LtdAdmin /></AppLayout>
+      </Route>
+      <Route path="/profile">
+        <AppLayout><Profile /></AppLayout>
       </Route>
       <Route>
         <AppLayout><NotFound /></AppLayout>

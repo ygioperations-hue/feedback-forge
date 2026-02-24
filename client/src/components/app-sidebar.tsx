@@ -63,10 +63,12 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-4 space-y-3">
         {user && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <User className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate" data-testid="text-user-email">{user.email}</span>
-          </div>
+          <Link href="/profile" className="flex items-center gap-2 text-sm hover:text-foreground transition-colors cursor-pointer" data-testid="link-profile">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 shrink-0">
+              <User className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <span className="truncate font-medium" data-testid="text-user-name">{user.firstName} {user.lastName}</span>
+          </Link>
         )}
         <Button
           variant="ghost"
