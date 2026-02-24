@@ -25,6 +25,10 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 
 const features = [
@@ -78,39 +82,16 @@ const howItWorks = [
   },
 ];
 
-const plans = [
-  {
-    name: "Monthly",
-    price: "$29",
-    period: "/month",
-    description: "For teams starting to collect feedback",
-    features: [
-      "Unlimited projects",
-      "Unlimited responses",
-      "AI-powered insights",
-      "Public roadmap",
-      "Changelog page",
-      "Embeddable widget",
-      "Priority support",
-    ],
-    popular: true,
-  },
-  {
-    name: "Yearly",
-    price: "$249",
-    period: "/year",
-    description: "Best value — save $99 per year",
-    features: [
-      "Everything in Monthly",
-      "2 months free",
-      "Advanced analytics",
-      "Team collaboration",
-      "API access",
-      "White-label option",
-      "Custom branding",
-    ],
-    popular: false,
-  },
+const planFeatures = [
+  "Unlimited projects",
+  "Unlimited responses",
+  "AI-powered insights",
+  "Public roadmap",
+  "Changelog page",
+  "Embeddable widget",
+  "Priority support",
+  "Advanced analytics",
+  "API access",
 ];
 
 const testimonials = [
@@ -133,7 +114,25 @@ const testimonials = [
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [ltdCode, setLtdCode] = useState("");
+
+  const redeemMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ltd/redeem", { code: ltdCode.trim() });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Lifetime deal activated!", description: "You now have unlimited access to all features." });
+      setLtdCode("");
+      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Invalid code", description: err.message, variant: "destructive" });
+    },
+  });
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -392,69 +391,126 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-10">
-            {plans.map((plan) => (
-              <Card
-                key={plan.name}
-                className={`relative ${plan.popular ? "border-primary shadow-md" : ""}`}
-                data-testid={`card-plan-${plan.name.toLowerCase()}`}
+          <div className="flex items-center justify-center mb-10">
+            <div className="inline-flex items-center rounded-full border bg-muted p-1" data-testid="toggle-billing">
+              <button
+                onClick={() => setBillingPeriod("monthly")}
+                className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
+                  billingPeriod === "monthly"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                data-testid="button-billing-monthly"
               >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge data-testid="badge-popular">Most Popular</Badge>
-                  </div>
-                )}
-                <CardContent className="p-6 sm:p-8 space-y-6">
-                  <div>
-                    <h3 className="text-xl font-semibold">{plan.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{plan.description}</p>
-                    <div className="flex items-baseline gap-1 mt-4">
-                      <span className="text-4xl font-bold">{plan.price}</span>
-                      <span className="text-muted-foreground">{plan.period}</span>
-                    </div>
-                  </div>
-                  <ul className="space-y-3">
-                    {plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-start gap-2.5 text-sm">
-                        <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Link href="/signup">
-                    <Button
-                      variant={plan.popular ? "default" : "outline"}
-                      className="w-full"
-                      size="lg"
-                      data-testid={`button-plan-${plan.name.toLowerCase()}`}
-                    >
-                      Get Started
-                      <ChevronRight className="w-4 h-4 ml-1" />
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            ))}
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingPeriod("yearly")}
+                className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
+                  billingPeriod === "yearly"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                data-testid="button-billing-yearly"
+              >
+                Yearly
+                <Badge variant="secondary" className="ml-2 text-xs px-1.5 py-0">Save 28%</Badge>
+              </button>
+            </div>
           </div>
 
-          <Card className="max-w-3xl mx-auto border-amber-500/30" data-testid="card-ltd-landing">
+          <Card className="relative max-w-lg mx-auto border-primary shadow-md mb-10" data-testid="card-plan-main">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <Badge data-testid="badge-popular">
+                {billingPeriod === "yearly" ? "Best Value" : "Most Popular"}
+              </Badge>
+            </div>
+            <CardContent className="p-6 sm:p-8 space-y-6">
+              <div className="text-center">
+                <h3 className="text-xl font-semibold">
+                  {billingPeriod === "monthly" ? "Monthly" : "Yearly"}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {billingPeriod === "monthly"
+                    ? "Full access to all features"
+                    : "Best value — save $99 per year"}
+                </p>
+                <div className="flex items-baseline justify-center gap-1 mt-4">
+                  <span className="text-5xl font-bold" data-testid="text-plan-price">
+                    {billingPeriod === "monthly" ? "$29" : "$249"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {billingPeriod === "monthly" ? "/month" : "/year"}
+                  </span>
+                </div>
+                {billingPeriod === "yearly" && (
+                  <p className="text-sm text-primary font-medium mt-2" data-testid="text-yearly-savings">
+                    That's ~$20.75/month — 2 months free!
+                  </p>
+                )}
+              </div>
+              <ul className="space-y-3">
+                {planFeatures.map((feature, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-sm">
+                    <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="pt-2">
+                <Link href={isAuthenticated ? "/dashboard" : "/signup"}>
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    data-testid="button-plan-cta"
+                  >
+                    Get Started
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="max-w-lg mx-auto border-amber-500/30" data-testid="card-ltd-landing">
             <CardContent className="p-6 sm:p-8">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="flex items-start gap-4">
                 <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-amber-500/10 shrink-0">
                   <Crown className="w-6 h-6 text-amber-500" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-lg">Lifetime Deal Available</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    One payment, unlimited access forever. No subscriptions, no recurring fees. Enter your code after signing up.
+                    One payment, unlimited access forever. No subscriptions, no recurring fees.
                   </p>
+                  {isAuthenticated ? (
+                    <div className="flex items-center gap-2 mt-4">
+                      <Input
+                        placeholder="FF-XXXX-XXXX-XXXX"
+                        value={ltdCode}
+                        onChange={(e) => setLtdCode(e.target.value)}
+                        className="max-w-[200px]"
+                        data-testid="input-ltd-code-landing"
+                      />
+                      <Button
+                        onClick={() => redeemMutation.mutate()}
+                        disabled={!ltdCode.trim() || redeemMutation.isPending}
+                        data-testid="button-redeem-ltd-landing"
+                      >
+                        {redeemMutation.isPending ? "Redeeming..." : "Redeem"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-4">
+                      <Link href="/signup">
+                        <Button variant="outline" size="sm" data-testid="button-ltd-signup">
+                          Sign Up to Redeem
+                          <ArrowRight className="w-4 h-4 ml-2" />
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
                 </div>
-                <Link href="/signup">
-                  <Button variant="outline" className="shrink-0" data-testid="button-ltd-signup">
-                    Sign Up to Redeem
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </Link>
               </div>
             </CardContent>
           </Card>
