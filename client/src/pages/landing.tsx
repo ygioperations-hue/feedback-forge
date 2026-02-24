@@ -82,16 +82,40 @@ const howItWorks = [
   },
 ];
 
-const planFeatures = [
-  "Unlimited projects",
-  "Unlimited responses",
-  "AI-powered insights",
-  "Public roadmap",
-  "Changelog page",
-  "Embeddable widget",
-  "Priority support",
-  "Advanced analytics",
-  "API access",
+const plans = [
+  {
+    id: "monthly" as const,
+    name: "Monthly",
+    price: "$29",
+    period: "/month",
+    description: "For teams starting to collect feedback",
+    features: [
+      "Unlimited projects",
+      "Unlimited responses",
+      "AI-powered insights",
+      "Public roadmap",
+      "Changelog page",
+      "Embeddable widget",
+      "Priority support",
+    ],
+  },
+  {
+    id: "yearly" as const,
+    name: "Yearly",
+    price: "$249",
+    period: "/year",
+    description: "Best value — save $99 per year",
+    savingsNote: "~$20.75/month — 2 months free!",
+    features: [
+      "Everything in Monthly",
+      "2 months free",
+      "Advanced analytics",
+      "Team collaboration",
+      "API access",
+      "White-label option",
+      "Custom branding",
+    ],
+  },
 ];
 
 const testimonials = [
@@ -391,86 +415,72 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="flex items-center justify-center mb-10">
-            <div className="inline-flex items-center rounded-full border bg-muted p-1" data-testid="toggle-billing">
-              <button
-                onClick={() => setBillingPeriod("monthly")}
-                className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
-                  billingPeriod === "monthly"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid="button-billing-monthly"
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setBillingPeriod("yearly")}
-                className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
-                  billingPeriod === "yearly"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid="button-billing-yearly"
-              >
-                Yearly
-                <Badge variant="secondary" className="ml-2 text-xs px-1.5 py-0">Save 28%</Badge>
-              </button>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-10">
+            {plans.map((plan) => {
+              const isSelected = billingPeriod === plan.id;
+              return (
+                <Card
+                  key={plan.id}
+                  onClick={() => setBillingPeriod(plan.id)}
+                  className={`relative cursor-pointer transition-all ${
+                    isSelected
+                      ? "border-primary shadow-md ring-2 ring-primary/20"
+                      : "border-border hover:border-muted-foreground/30"
+                  }`}
+                  data-testid={`card-plan-${plan.id}`}
+                >
+                  {isSelected && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge data-testid={`badge-selected-${plan.id}`}>
+                        {plan.id === "yearly" ? "Best Value" : "Most Popular"}
+                      </Badge>
+                    </div>
+                  )}
+                  {plan.id === "yearly" && !isSelected && (
+                    <div className="absolute -top-3 right-4">
+                      <Badge variant="secondary" className="text-xs">Save 28%</Badge>
+                    </div>
+                  )}
+                  <CardContent className="p-6 sm:p-8 space-y-6">
+                    <div>
+                      <h3 className="text-xl font-semibold">{plan.name}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">{plan.description}</p>
+                      <div className="flex items-baseline gap-1 mt-4">
+                        <span className="text-4xl font-bold">{plan.price}</span>
+                        <span className="text-muted-foreground">{plan.period}</span>
+                      </div>
+                      {"savingsNote" in plan && plan.savingsNote && isSelected && (
+                        <p className="text-sm text-primary font-medium mt-2" data-testid="text-yearly-savings">
+                          {plan.savingsNote}
+                        </p>
+                      )}
+                    </div>
+                    <ul className="space-y-3">
+                      {plan.features.map((feature, i) => (
+                        <li key={i} className="flex items-start gap-2.5 text-sm">
+                          <Check className={`w-4 h-4 shrink-0 mt-0.5 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="pt-2">
+                      <Link href={isAuthenticated ? "/dashboard" : "/signup"}>
+                        <Button
+                          variant={isSelected ? "default" : "outline"}
+                          className="w-full"
+                          size="lg"
+                          data-testid={`button-plan-${plan.id}`}
+                        >
+                          Get Started
+                          <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
-
-          <Card className="relative max-w-lg mx-auto border-primary shadow-md mb-10" data-testid="card-plan-main">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-              <Badge data-testid="badge-popular">
-                {billingPeriod === "yearly" ? "Best Value" : "Most Popular"}
-              </Badge>
-            </div>
-            <CardContent className="p-6 sm:p-8 space-y-6">
-              <div className="text-center">
-                <h3 className="text-xl font-semibold">
-                  {billingPeriod === "monthly" ? "Monthly" : "Yearly"}
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {billingPeriod === "monthly"
-                    ? "Full access to all features"
-                    : "Best value — save $99 per year"}
-                </p>
-                <div className="flex items-baseline justify-center gap-1 mt-4">
-                  <span className="text-5xl font-bold" data-testid="text-plan-price">
-                    {billingPeriod === "monthly" ? "$29" : "$249"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {billingPeriod === "monthly" ? "/month" : "/year"}
-                  </span>
-                </div>
-                {billingPeriod === "yearly" && (
-                  <p className="text-sm text-primary font-medium mt-2" data-testid="text-yearly-savings">
-                    That's ~$20.75/month — 2 months free!
-                  </p>
-                )}
-              </div>
-              <ul className="space-y-3">
-                {planFeatures.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm">
-                    <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="pt-2">
-                <Link href={isAuthenticated ? "/dashboard" : "/signup"}>
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    data-testid="button-plan-cta"
-                  >
-                    Get Started
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
 
           <Card className="max-w-lg mx-auto border-amber-500/30" data-testid="card-ltd-landing">
             <CardContent className="p-6 sm:p-8">
