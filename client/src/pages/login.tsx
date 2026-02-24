@@ -20,14 +20,14 @@ export default function Login() {
       const res = await apiRequest("POST", "/api/auth/login", { email, password });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/auth/me"], data);
       setLocation("/dashboard");
     },
     onError: (err: Error) => {
       toast({
         title: "Login failed",
-        description: err.message.replace(/^\d+:\s*/, "").replace(/^"(.*)"$/, "$1"),
+        description: err.message,
         variant: "destructive",
       });
     },

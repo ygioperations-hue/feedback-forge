@@ -41,7 +41,7 @@ export default function ForgotPassword() {
     onError: (err: Error) => {
       toast({
         title: "Request failed",
-        description: err.message.replace(/^\d+:\s*/, "").replace(/^"(.*)"$/, "$1"),
+        description: err.message,
         variant: "destructive",
       });
     },
@@ -58,7 +58,7 @@ export default function ForgotPassword() {
     onError: (err: Error) => {
       toast({
         title: "Reset failed",
-        description: err.message.replace(/^\d+:\s*/, "").replace(/^"(.*)"$/, "$1"),
+        description: err.message,
         variant: "destructive",
       });
     },
