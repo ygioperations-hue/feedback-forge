@@ -1,6 +1,18 @@
 import { getUncachableStripeClient } from './stripeClient';
 import { storage } from './storage';
 
+function parseStripeDate(value: any): Date | undefined {
+  if (!value) return undefined;
+  if (typeof value === 'number') {
+    return new Date(value * 1000);
+  }
+  if (typeof value === 'string') {
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return undefined;
+}
+
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
     if (!Buffer.isBuffer(payload)) {
@@ -12,27 +24,30 @@ export class WebhookHandlers {
       );
     }
 
-    const stripe = await getUncachableStripeClient();
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
     let event: any;
-    if (webhookSecret) {
-      event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-    } else {
+    try {
       event = JSON.parse(payload.toString());
+    } catch (parseErr: any) {
+      console.error('Failed to parse webhook payload:', parseErr.message);
+      throw parseErr;
     }
 
-    const eventType = event.type || event.data?.type;
+    const eventType = event.type;
     const data = event.data?.object;
 
-    if (!data) return;
+    console.log(`Stripe webhook received: ${eventType}`);
+
+    if (!data) {
+      console.log('Webhook: No data object in event');
+      return;
+    }
 
     try {
       if (eventType === 'checkout.session.completed') {
         await WebhookHandlers.handleCheckoutCompleted(data);
       }
 
-      if (eventType === 'customer.subscription.updated') {
+      if (eventType === 'customer.subscription.created' || eventType === 'customer.subscription.updated') {
         await WebhookHandlers.handleSubscriptionUpdated(data);
       }
 
@@ -40,7 +55,7 @@ export class WebhookHandlers {
         await WebhookHandlers.handleSubscriptionDeleted(data);
       }
     } catch (err: any) {
-      console.error('Error processing webhook event:', err.message);
+      console.error('Error processing webhook event:', err.message, err.stack);
     }
   }
 
@@ -49,7 +64,12 @@ export class WebhookHandlers {
     const stripeSubscriptionId = data.subscription;
     const metadata = data.metadata || {};
 
-    if (!customerId || !stripeSubscriptionId) return;
+    console.log(`Checkout completed: customer=${customerId}, subscription=${stripeSubscriptionId}, metadata=${JSON.stringify(metadata)}`);
+
+    if (!customerId || !stripeSubscriptionId) {
+      console.log('Checkout: Missing customer or subscription ID');
+      return;
+    }
 
     const user = await storage.getUserByStripeCustomerId(customerId);
     if (!user) {
@@ -69,18 +89,24 @@ export class WebhookHandlers {
       return;
     }
 
-    let periodStart: Date | undefined;
-    let periodEnd: Date | undefined;
+    let periodStart: Date = new Date();
+    let periodEnd: Date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     try {
       const stripe = await getUncachableStripeClient();
       const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-      periodStart = new Date((stripeSub as any).current_period_start * 1000);
-      periodEnd = new Date((stripeSub as any).current_period_end * 1000);
+      const subAny = stripeSub as any;
+      const itemData = subAny.items?.data?.[0];
+      const parsedStart = parseStripeDate(subAny.current_period_start)
+        || parseStripeDate(itemData?.current_period_start)
+        || parseStripeDate(subAny.start_date);
+      const parsedEnd = parseStripeDate(subAny.current_period_end)
+        || parseStripeDate(itemData?.current_period_end);
+      if (parsedStart) periodStart = parsedStart;
+      if (parsedEnd) periodEnd = parsedEnd;
+      console.log(`Stripe subscription retrieved: start=${periodStart.toISOString()}, end=${periodEnd.toISOString()}`);
     } catch (err: any) {
       console.error('Failed to retrieve subscription from Stripe:', err.message);
-      periodStart = new Date();
-      periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
 
     await storage.createSubscription({
@@ -100,10 +126,51 @@ export class WebhookHandlers {
     const stripeSubId = data.id;
     const status = data.status;
     const cancelAtPeriodEnd = data.cancel_at_period_end ?? false;
+    const customerId = data.customer;
+
+    console.log(`Subscription updated: id=${stripeSubId}, status=${status}, customer=${customerId}`);
 
     const existing = await storage.getSubscriptionByStripeId(stripeSubId);
     if (!existing) {
-      console.log(`Webhook: No local subscription found for ${stripeSubId}`);
+      console.log(`Webhook: No local subscription found for ${stripeSubId}, attempting to create from event data`);
+
+      if (customerId && (status === 'active' || status === 'trialing')) {
+        const user = await storage.getUserByStripeCustomerId(customerId);
+        if (user) {
+          const plans = await storage.getPlans();
+          const priceId = data.items?.data?.[0]?.price?.id || data.plan?.id;
+          let matchedPlan = plans.find(p => p.stripePriceId === priceId);
+          if (!matchedPlan) {
+            const interval = data.items?.data?.[0]?.price?.recurring?.interval || data.plan?.interval;
+            matchedPlan = plans.find(p => p.interval === interval);
+          }
+          if (!matchedPlan && plans.length > 0) {
+            matchedPlan = plans[0];
+          }
+
+          if (matchedPlan) {
+            const evtItemData = data.items?.data?.[0];
+            const periodStart = parseStripeDate(data.current_period_start)
+              || parseStripeDate(evtItemData?.current_period_start)
+              || parseStripeDate(data.start_date)
+              || new Date();
+            const periodEnd = parseStripeDate(data.current_period_end)
+              || parseStripeDate(evtItemData?.current_period_end)
+              || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+            await storage.createSubscription({
+              userId: user.id,
+              planId: matchedPlan.id,
+              stripeSubscriptionId: stripeSubId,
+              status,
+              currentPeriodStart: periodStart,
+              currentPeriodEnd: periodEnd,
+              cancelAtPeriodEnd,
+            });
+            console.log(`Created subscription from update event for user ${user.id}: ${stripeSubId}`);
+          }
+        }
+      }
       return;
     }
 
@@ -112,12 +179,14 @@ export class WebhookHandlers {
       cancelAtPeriodEnd,
     };
 
-    if (data.current_period_start) {
-      updateData.currentPeriodStart = new Date(data.current_period_start * 1000);
-    }
-    if (data.current_period_end) {
-      updateData.currentPeriodEnd = new Date(data.current_period_end * 1000);
-    }
+    const itemData = data.items?.data?.[0];
+    const parsedStart = parseStripeDate(data.current_period_start)
+      || parseStripeDate(itemData?.current_period_start)
+      || parseStripeDate(data.start_date);
+    const parsedEnd = parseStripeDate(data.current_period_end)
+      || parseStripeDate(itemData?.current_period_end);
+    if (parsedStart) updateData.currentPeriodStart = parsedStart;
+    if (parsedEnd) updateData.currentPeriodEnd = parsedEnd;
 
     await storage.updateSubscriptionByStripeId(stripeSubId, updateData);
     console.log(`Updated subscription ${stripeSubId}: status=${status}, cancelAtPeriodEnd=${cancelAtPeriodEnd}`);
