@@ -90,7 +90,6 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 - GET /api/billing/history - Get payment history (via Stripe API directly)
 - POST /api/billing/cancel - Cancel subscription at period end (sets cancel_at_period_end in Stripe + local DB)
 - POST /api/billing/reactivate - Undo cancellation (clears cancel_at_period_end in Stripe + local DB)
-- POST /api/billing/portal - Create Stripe billing portal session
 
 ### Public (no auth required)
 - GET /api/forms/:slug - Get form by slug

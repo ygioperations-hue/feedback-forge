@@ -944,27 +944,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/billing/portal", requireAuth, async (req, res) => {
-    try {
-      const user = await storage.getUserById(req.session.userId!);
-      if (!user || !user.stripeCustomerId) {
-        return res.status(400).json({ message: "No billing account found" });
-      }
-
-      const stripe = await getUncachableStripeClient();
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const portalSession = await stripe.billingPortal.sessions.create({
-        customer: user.stripeCustomerId,
-        return_url: `${baseUrl}/billing`,
-      });
-
-      res.json({ url: portalSession.url });
-    } catch (err) {
-      console.error("Portal error:", err);
-      res.status(500).json({ message: "Failed to create billing portal session" });
-    }
-  });
-
   app.get("/api/ltd/codes", requireAuth, async (req, res) => {
     try {
       const uid = req.session.userId!;

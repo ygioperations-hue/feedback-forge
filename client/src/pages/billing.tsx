@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CreditCard, ExternalLink, CheckCircle, Crown, Calendar, DollarSign, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
+import { Loader2, CreditCard, CheckCircle, Crown, Calendar, DollarSign, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useActivation } from "@/components/paywall-gate";
@@ -65,21 +65,6 @@ export default function Billing() {
 
   const { data: historyData, isLoading: historyLoading } = useQuery<PaymentData>({
     queryKey: ["/api/billing/history"],
-  });
-
-  const portalMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/billing/portal");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
   });
 
   const cancelMutation = useMutation({
@@ -284,16 +269,6 @@ export default function Billing() {
                   </AlertDialog>
                 )}
 
-                <Button
-                  variant="outline"
-                  onClick={() => portalMutation.mutate()}
-                  disabled={portalMutation.isPending}
-                  data-testid="button-manage-subscription"
-                >
-                  {portalMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Manage on Stripe
-                  <ExternalLink className="w-4 h-4 ml-2" />
-                </Button>
               </div>
             </div>
           ) : limits?.plan === "lifetime" ? (
