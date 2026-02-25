@@ -788,6 +788,11 @@ export async function registerRoutes(
       const user = await storage.getUserById(req.session.userId!);
       if (!user) return res.status(401).json({ message: "Not authenticated" });
 
+      const activeSub = await storage.getActiveSubscription(user.id);
+      if (activeSub) {
+        return res.status(400).json({ message: "You already have an active subscription. Please cancel your current plan before subscribing to a new one." });
+      }
+
       const interval = parsed.data.plan === "monthly" ? "month" : "year";
       const dbPlan = await storage.getPlanByInterval(interval);
       if (!dbPlan || !dbPlan.stripePriceId) {
