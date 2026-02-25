@@ -62,6 +62,7 @@ export interface IStorage {
   updatePlanStripePriceId(id: string, stripePriceId: string): Promise<Plan>;
 
   getActiveSubscription(userId: string): Promise<SubscriptionWithPlan | undefined>;
+  getLatestSubscription(userId: string): Promise<SubscriptionWithPlan | undefined>;
   createSubscription(sub: InsertSubscription): Promise<Subscription>;
   updateSubscriptionByStripeId(stripeSubId: string, data: Partial<Pick<Subscription, "status" | "currentPeriodStart" | "currentPeriodEnd" | "cancelAtPeriodEnd" | "planId">>): Promise<Subscription | undefined>;
   getSubscriptionByStripeId(stripeSubId: string): Promise<Subscription | undefined>;
@@ -172,6 +173,20 @@ export class DatabaseStorage implements IStorage {
           sql`${subscriptions.status} IN ('active', 'trialing')`
         )
       );
+    if (results.length === 0) return undefined;
+    const sub = results[0];
+    const [plan] = await db.select().from(plans).where(eq(plans.id, sub.planId));
+    if (!plan) return undefined;
+    return { ...sub, plan };
+  }
+
+  async getLatestSubscription(userId: string): Promise<SubscriptionWithPlan | undefined> {
+    const results = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .orderBy(sql`${subscriptions.createdAt} DESC`)
+      .limit(1);
     if (results.length === 0) return undefined;
     const sub = results[0];
     const [plan] = await db.select().from(plans).where(eq(plans.id, sub.planId));

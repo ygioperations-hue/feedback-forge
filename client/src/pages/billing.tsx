@@ -271,6 +271,82 @@ export default function Billing() {
 
               </div>
             </div>
+          ) : subscription && subscription.status === "past_due" ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-500/10">
+                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-lg" data-testid="text-plan-name">
+                      {subscription.planName} Plan
+                    </p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-plan-price">
+                      {getPlanPrice()}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="destructive" data-testid="badge-plan-status">Past Due</Badge>
+              </div>
+
+              <Card className="border-red-500/30 bg-red-500/5" data-testid="card-past-due-notice">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <XCircle className="w-5 h-5 text-red-500 shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-medium text-red-700 dark:text-red-400">Payment failed</p>
+                    <p className="text-sm text-muted-foreground">
+                      Your last payment could not be processed. Please update your payment method to continue using all features.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <a href="/#pricing">
+                <Button data-testid="button-update-payment">
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Update Payment Method
+                </Button>
+              </a>
+            </div>
+          ) : subscription && subscription.status === "canceled" ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-muted">
+                    <Crown className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-lg" data-testid="text-plan-name">
+                      {subscription.planName} Plan
+                    </p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-plan-price">
+                      {getPlanPrice()}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="secondary" data-testid="badge-plan-status">Canceled</Badge>
+              </div>
+
+              <Card className="border-muted bg-muted/30" data-testid="card-canceled-notice">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <XCircle className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-medium">Subscription canceled</p>
+                    <p className="text-sm text-muted-foreground">
+                      Your subscription has ended. Subscribe again to regain access to all features.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <a href="/#pricing">
+                <Button data-testid="button-resubscribe">
+                  <Crown className="w-4 h-4 mr-2" />
+                  Subscribe Again
+                </Button>
+              </a>
+            </div>
           ) : limits?.plan === "lifetime" ? (
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-500/10">

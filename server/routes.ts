@@ -830,21 +830,21 @@ export async function registerRoutes(
       const user = await storage.getUserById(req.session.userId!);
       if (!user) return res.status(401).json({ message: "Not authenticated" });
 
-      const activeSub = await storage.getActiveSubscription(user.id);
-      if (!activeSub) {
+      const sub = await storage.getLatestSubscription(user.id);
+      if (!sub) {
         return res.json({ subscription: null });
       }
 
       res.json({
         subscription: {
-          id: activeSub.id,
-          status: activeSub.status,
-          planName: activeSub.plan.name,
-          planPrice: activeSub.plan.price,
-          interval: activeSub.plan.interval,
-          currentPeriodStart: activeSub.currentPeriodStart?.toISOString() || null,
-          currentPeriodEnd: activeSub.currentPeriodEnd?.toISOString() || null,
-          cancelAtPeriodEnd: activeSub.cancelAtPeriodEnd,
+          id: sub.id,
+          status: sub.status,
+          planName: sub.plan.name,
+          planPrice: sub.plan.price,
+          interval: sub.plan.interval,
+          currentPeriodStart: sub.currentPeriodStart?.toISOString() || null,
+          currentPeriodEnd: sub.currentPeriodEnd?.toISOString() || null,
+          cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
         },
       });
     } catch (err) {
