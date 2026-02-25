@@ -24,12 +24,26 @@ export class WebhookHandlers {
       );
     }
 
+    const stripe = await getUncachableStripeClient();
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
     let event: any;
-    try {
-      event = JSON.parse(payload.toString());
-    } catch (parseErr: any) {
-      console.error('Failed to parse webhook payload:', parseErr.message);
-      throw parseErr;
+
+    if (webhookSecret) {
+      try {
+        event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+      } catch (err: any) {
+        console.error('Webhook signature verification failed:', err.message);
+        throw new Error(`Webhook signature verification failed: ${err.message}`);
+      }
+    } else {
+      console.warn('STRIPE_WEBHOOK_SECRET not set — skipping signature verification. Set this secret for production security.');
+      try {
+        event = JSON.parse(payload.toString());
+      } catch (parseErr: any) {
+        console.error('Failed to parse webhook payload:', parseErr.message);
+        throw parseErr;
+      }
     }
 
     const eventType = event.type;

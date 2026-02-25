@@ -44,7 +44,7 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 - `server/routes.ts` - REST API endpoints under /api (auth + protected + public), isUserActivated() helper
 - `server/stripeClient.ts` - Stripe client initialization (via Replit connector)
 - `server/stripe-setup.ts` - Auto-creates Stripe product/prices on startup, links stripePriceId to plans table
-- `server/webhookHandlers.ts` - Stripe webhook handlers: checkout.session.completed, subscription.updated, subscription.deleted → writes to subscriptions table
+- `server/webhookHandlers.ts` - Stripe webhook handlers: checkout.session.completed, subscription.updated, subscription.deleted → writes to subscriptions table; signature verification via STRIPE_WEBHOOK_SECRET
 - `server/seed.ts` - Seeds plans (Monthly/Yearly), demo user, 3 projects with questions, responses, roadmap, changelog
 - `client/src/lib/auth.tsx` - AuthProvider context with user, useAuth hook, RequireAuth gate component
 - `client/src/pages/login.tsx` - Login page with email/password
