@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CreditCard, CheckCircle, Crown, Calendar, DollarSign, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
+import { Loader2, CreditCard, CheckCircle, Crown, Calendar, DollarSign, XCircle, RefreshCw, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useActivation } from "@/components/paywall-gate";
@@ -74,6 +74,21 @@ export default function Billing() {
     },
     onSuccess: (data) => {
       toast({ title: "Subscription canceled", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const switchMutation = useMutation({
+    mutationFn: async (plan: "monthly" | "yearly") => {
+      const res = await apiRequest("POST", "/api/billing/switch", { plan });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Plan switched", description: data.message });
       queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
     },
@@ -231,42 +246,82 @@ export default function Billing() {
                     Reactivate Subscription
                   </Button>
                 ) : (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        disabled={cancelMutation.isPending}
-                        data-testid="button-cancel-subscription"
-                      >
-                        {cancelMutation.isPending ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <XCircle className="w-4 h-4 mr-2" />
-                        )}
-                        Cancel Subscription
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent data-testid="dialog-cancel-confirm">
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Cancel your subscription?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Your subscription will remain active until the end of your current billing period on{" "}
-                          <span className="font-medium">{formatDate(subscription.currentPeriodEnd)}</span>.
-                          After that, you'll lose access to all paid features. You can reactivate anytime before the period ends.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel data-testid="button-cancel-dismiss">Keep Subscription</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => cancelMutation.mutate()}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          data-testid="button-cancel-confirm"
+                  <>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          disabled={switchMutation.isPending}
+                          data-testid="button-switch-plan"
                         >
-                          Yes, Cancel
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                          {switchMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <ArrowRightLeft className="w-4 h-4 mr-2" />
+                          )}
+                          Switch to {subscription.interval === "month" ? "Yearly ($249/yr)" : "Monthly ($29/mo)"}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent data-testid="dialog-switch-confirm">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Switch to {subscription.interval === "month" ? "Yearly" : "Monthly"} plan?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {subscription.interval === "month"
+                              ? "You'll be switched to the Yearly plan ($249/yr). The unused portion of your current monthly billing cycle will be credited toward the yearly charge."
+                              : "You'll be switched to the Monthly plan ($29/mo). The unused portion of your current yearly billing cycle will be credited toward future monthly charges."}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel data-testid="button-switch-dismiss">Keep Current Plan</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => switchMutation.mutate(subscription.interval === "month" ? "yearly" : "monthly")}
+                            data-testid="button-switch-confirm"
+                          >
+                            Yes, Switch Plan
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          disabled={cancelMutation.isPending}
+                          data-testid="button-cancel-subscription"
+                        >
+                          {cancelMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <XCircle className="w-4 h-4 mr-2" />
+                          )}
+                          Cancel Subscription
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent data-testid="dialog-cancel-confirm">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Cancel your subscription?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Your subscription will remain active until the end of your current billing period on{" "}
+                            <span className="font-medium">{formatDate(subscription.currentPeriodEnd)}</span>.
+                            After that, you'll lose access to all paid features. You can reactivate anytime before the period ends.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel data-testid="button-cancel-dismiss">Keep Subscription</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => cancelMutation.mutate()}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            data-testid="button-cancel-confirm"
+                          >
+                            Yes, Cancel
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </>
                 )}
 
               </div>

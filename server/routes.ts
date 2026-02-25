@@ -893,6 +893,60 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/billing/switch", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({ plan: z.enum(["monthly", "yearly"]) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid plan selected" });
+      }
+
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      const activeSub = await storage.getActiveSubscription(user.id);
+      if (!activeSub || !activeSub.stripeSubscriptionId) {
+        return res.status(400).json({ message: "No active subscription to switch" });
+      }
+
+      if (activeSub.cancelAtPeriodEnd) {
+        return res.status(400).json({ message: "Cannot switch plans while subscription is scheduled for cancellation. Please reactivate first." });
+      }
+
+      const newInterval = parsed.data.plan === "monthly" ? "month" : "year";
+      if (activeSub.plan.interval === newInterval) {
+        return res.status(400).json({ message: "You are already on this plan" });
+      }
+
+      const newPlan = await storage.getPlanByInterval(newInterval);
+      if (!newPlan || !newPlan.stripePriceId) {
+        return res.status(400).json({ message: "Target plan not found" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const stripeSub = await stripe.subscriptions.retrieve(activeSub.stripeSubscriptionId) as any;
+      const subscriptionItemId = stripeSub.items?.data?.[0]?.id;
+
+      if (!subscriptionItemId) {
+        return res.status(500).json({ message: "Could not find subscription item to update" });
+      }
+
+      await stripe.subscriptions.update(activeSub.stripeSubscriptionId, {
+        items: [{ id: subscriptionItemId, price: newPlan.stripePriceId }],
+        proration_behavior: 'create_prorations',
+      } as any);
+
+      await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, {
+        planId: newPlan.id,
+      });
+
+      res.json({ message: `Switched to ${newPlan.name} plan successfully` });
+    } catch (err: any) {
+      console.error("Switch plan error:", err?.message);
+      res.status(500).json({ message: "Failed to switch plan" });
+    }
+  });
+
   app.post("/api/billing/cancel", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUserById(req.session.userId!);

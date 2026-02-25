@@ -202,6 +202,16 @@ export class WebhookHandlers {
     if (parsedStart) updateData.currentPeriodStart = parsedStart;
     if (parsedEnd) updateData.currentPeriodEnd = parsedEnd;
 
+    const priceId = itemData?.price?.id || data.plan?.id;
+    if (priceId) {
+      const plans = await storage.getPlans();
+      const matchedPlan = plans.find(p => p.stripePriceId === priceId);
+      if (matchedPlan && matchedPlan.id !== existing.planId) {
+        updateData.planId = matchedPlan.id;
+        console.log(`Subscription ${stripeSubId}: plan changed to ${matchedPlan.name} (${matchedPlan.id})`);
+      }
+    }
+
     await storage.updateSubscriptionByStripeId(stripeSubId, updateData);
     console.log(`Updated subscription ${stripeSubId}: status=${status}, cancelAtPeriodEnd=${cancelAtPeriodEnd}`);
   }
