@@ -888,6 +888,62 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/billing/cancel", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      const activeSub = await storage.getActiveSubscription(user.id);
+      if (!activeSub || !activeSub.stripeSubscriptionId) {
+        return res.status(400).json({ message: "No active subscription to cancel" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      await stripe.subscriptions.update(activeSub.stripeSubscriptionId, {
+        cancel_at_period_end: true,
+      });
+
+      await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, {
+        cancelAtPeriodEnd: true,
+      });
+
+      res.json({ message: "Subscription will be canceled at the end of the current billing period" });
+    } catch (err: any) {
+      console.error("Cancel subscription error:", err?.message);
+      res.status(500).json({ message: "Failed to cancel subscription" });
+    }
+  });
+
+  app.post("/api/billing/reactivate", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      const activeSub = await storage.getActiveSubscription(user.id);
+      if (!activeSub || !activeSub.stripeSubscriptionId) {
+        return res.status(400).json({ message: "No subscription to reactivate" });
+      }
+
+      if (!activeSub.cancelAtPeriodEnd) {
+        return res.status(400).json({ message: "Subscription is not scheduled for cancellation" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      await stripe.subscriptions.update(activeSub.stripeSubscriptionId, {
+        cancel_at_period_end: false,
+      });
+
+      await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, {
+        cancelAtPeriodEnd: false,
+      });
+
+      res.json({ message: "Subscription reactivated successfully" });
+    } catch (err: any) {
+      console.error("Reactivate subscription error:", err?.message);
+      res.status(500).json({ message: "Failed to reactivate subscription" });
+    }
+  });
+
   app.post("/api/billing/portal", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUserById(req.session.userId!);

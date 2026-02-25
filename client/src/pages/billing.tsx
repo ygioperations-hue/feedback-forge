@@ -1,14 +1,25 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CreditCard, ExternalLink, CheckCircle, Crown, Calendar, DollarSign } from "lucide-react";
+import { Loader2, CreditCard, ExternalLink, CheckCircle, Crown, Calendar, DollarSign, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useActivation } from "@/components/paywall-gate";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type SubscriptionData = {
   subscription: {
@@ -65,6 +76,36 @@ export default function Billing() {
       if (data.url) {
         window.location.href = data.url;
       }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/billing/cancel");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Subscription canceled", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const reactivateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/billing/reactivate");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Subscription reactivated", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -163,6 +204,7 @@ export default function Billing() {
                   {subscription.cancelAtPeriodEnd ? "Cancelling" : "Active"}
                 </Badge>
               </div>
+
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="w-4 h-4 text-muted-foreground" />
@@ -174,16 +216,85 @@ export default function Billing() {
                   </div>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => portalMutation.mutate()}
-                disabled={portalMutation.isPending}
-                data-testid="button-manage-subscription"
-              >
-                {portalMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Manage Subscription
-                <ExternalLink className="w-4 h-4 ml-2" />
-              </Button>
+
+              {subscription.cancelAtPeriodEnd && (
+                <Card className="border-amber-500/30 bg-amber-500/5" data-testid="card-cancel-notice">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-medium text-amber-700 dark:text-amber-400">Subscription ending soon</p>
+                      <p className="text-sm text-muted-foreground">
+                        Your access will end on {formatDate(subscription.currentPeriodEnd)}. You can reactivate anytime before then.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex flex-wrap gap-3 pt-1">
+                {subscription.cancelAtPeriodEnd ? (
+                  <Button
+                    onClick={() => reactivateMutation.mutate()}
+                    disabled={reactivateMutation.isPending}
+                    data-testid="button-reactivate-subscription"
+                  >
+                    {reactivateMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    Reactivate Subscription
+                  </Button>
+                ) : (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        disabled={cancelMutation.isPending}
+                        data-testid="button-cancel-subscription"
+                      >
+                        {cancelMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <XCircle className="w-4 h-4 mr-2" />
+                        )}
+                        Cancel Subscription
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent data-testid="dialog-cancel-confirm">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Cancel your subscription?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Your subscription will remain active until the end of your current billing period on{" "}
+                          <span className="font-medium">{formatDate(subscription.currentPeriodEnd)}</span>.
+                          After that, you'll lose access to all paid features. You can reactivate anytime before the period ends.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel data-testid="button-cancel-dismiss">Keep Subscription</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => cancelMutation.mutate()}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          data-testid="button-cancel-confirm"
+                        >
+                          Yes, Cancel
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+
+                <Button
+                  variant="outline"
+                  onClick={() => portalMutation.mutate()}
+                  disabled={portalMutation.isPending}
+                  data-testid="button-manage-subscription"
+                >
+                  {portalMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Manage on Stripe
+                  <ExternalLink className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
             </div>
           ) : limits?.plan === "lifetime" ? (
             <div className="flex items-center gap-3">
