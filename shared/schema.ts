@@ -10,9 +10,29 @@ export const users = pgTable("users", {
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   stripeCustomerId: text("stripe_customer_id"),
-  stripeSubscriptionId: text("stripe_subscription_id"),
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const plans = pgTable("plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  price: integer("price").notNull(),
+  interval: text("interval").notNull(),
+  stripePriceId: text("stripe_price_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  planId: varchar("plan_id").notNull().references(() => plans.id),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  status: text("status").notNull().default("active"),
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -82,7 +102,9 @@ export const ltdCodes = pgTable("ltd_codes", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, resetToken: true, resetTokenExpiry: true, stripeCustomerId: true, stripeSubscriptionId: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, resetToken: true, resetTokenExpiry: true, stripeCustomerId: true });
+export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true });
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
 export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
 export const insertResponseSchema = createInsertSchema(responses).omit({ id: true, submittedAt: true });
@@ -93,6 +115,10 @@ export const insertLtdCodeSchema = createInsertSchema(ltdCodes).omit({ id: true,
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Plan = typeof plans.$inferSelect;
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Question = typeof questions.$inferSelect;
@@ -110,3 +136,4 @@ export type InsertLtdCode = z.infer<typeof insertLtdCodeSchema>;
 
 export type ProjectWithQuestions = Project & { questions: Question[] };
 export type ResponseWithAnswers = FeedbackResponse & { answers: Answer[] };
+export type SubscriptionWithPlan = Subscription & { plan: Plan };

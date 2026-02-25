@@ -14,10 +14,12 @@ type SubscriptionData = {
   subscription: {
     id: string;
     status: string;
-    current_period_start: number;
-    current_period_end: number;
-    cancel_at_period_end: boolean;
-    items: any;
+    planName: string;
+    planPrice: number;
+    interval: string;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
   } | null;
 };
 
@@ -72,7 +74,16 @@ export default function Billing() {
   const subscription = billingData?.subscription;
   const payments = historyData?.payments || [];
 
-  const formatDate = (timestamp: number) => {
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "—";
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  const formatTimestamp = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
@@ -87,25 +98,11 @@ export default function Billing() {
     }).format(amount / 100);
   };
 
-  const getPlanName = () => {
-    if (!subscription) return null;
-    const items = typeof subscription.items === "string" ? JSON.parse(subscription.items) : subscription.items;
-    const price = items?.data?.[0]?.price;
-    const recurring = price?.recurring;
-    if (recurring?.interval === "year") return "Yearly";
-    return "Monthly";
-  };
-
   const getPlanPrice = () => {
     if (!subscription) return null;
-    const items = typeof subscription.items === "string" ? JSON.parse(subscription.items) : subscription.items;
-    const price = items?.data?.[0]?.price;
-    const amount = price?.unit_amount;
-    const interval = price?.recurring?.interval;
-    if (amount && interval) {
-      return `$${(amount / 100).toFixed(0)}/${interval === "year" ? "yr" : "mo"}`;
-    }
-    return null;
+    const amount = subscription.planPrice;
+    const interval = subscription.interval;
+    return `$${(amount / 100).toFixed(0)}/${interval === "year" ? "yr" : "mo"}`;
   };
 
   if (billingLoading) {
@@ -155,15 +152,15 @@ export default function Billing() {
                   </div>
                   <div>
                     <p className="font-semibold text-lg" data-testid="text-plan-name">
-                      {getPlanName()} Plan
+                      {subscription.planName} Plan
                     </p>
                     <p className="text-sm text-muted-foreground" data-testid="text-plan-price">
                       {getPlanPrice()}
                     </p>
                   </div>
                 </div>
-                <Badge variant={subscription.cancel_at_period_end ? "secondary" : "default"} data-testid="badge-plan-status">
-                  {subscription.cancel_at_period_end ? "Cancelling" : "Active"}
+                <Badge variant={subscription.cancelAtPeriodEnd ? "secondary" : "default"} data-testid="badge-plan-status">
+                  {subscription.cancelAtPeriodEnd ? "Cancelling" : "Active"}
                 </Badge>
               </div>
               <div className="grid grid-cols-2 gap-4 pt-2">
@@ -172,7 +169,7 @@ export default function Billing() {
                   <div>
                     <p className="text-muted-foreground">Current period</p>
                     <p className="font-medium" data-testid="text-period-dates">
-                      {formatDate(subscription.current_period_start)} — {formatDate(subscription.current_period_end)}
+                      {formatDate(subscription.currentPeriodStart)} — {formatDate(subscription.currentPeriodEnd)}
                     </p>
                   </div>
                 </div>
@@ -239,7 +236,7 @@ export default function Billing() {
                       {formatAmount(payment.amount, payment.currency)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatDate(payment.created)}
+                      {formatTimestamp(payment.created)}
                     </p>
                   </div>
                   <Badge variant={payment.status === "succeeded" ? "default" : "secondary"}>

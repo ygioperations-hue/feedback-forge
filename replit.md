@@ -14,34 +14,38 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 - Demo account: demo@feedbackforge.app / password123
 
 ## Recent Changes
+- 2026-02-25: Replaced stripe.* external tables with local plans + subscriptions tables
+- 2026-02-25: Plans table stores pricing (Monthly $29/mo, Yearly $249/yr) with Stripe price IDs
+- 2026-02-25: Subscriptions table tracks user subscriptions (status, period dates, cancelAtPeriodEnd)
+- 2026-02-25: Removed stripeSubscriptionId from users table (moved to subscriptions table)
+- 2026-02-25: Removed stripe-replit-sync dependency from index.ts (no more runMigrations/syncBackfill)
+- 2026-02-25: Added server/stripe-setup.ts for auto-creating Stripe products/prices on startup
+- 2026-02-25: Added isUserActivated() helper for paywall checks (replaces repeated stripe.subscriptions SQL)
+- 2026-02-25: Billing history now uses Stripe API directly (stripe.paymentIntents.list)
+- 2026-02-25: Added GET /api/plans public endpoint
 - 2026-02-25: Removed multi-tenant/organization architecture entirely
 - 2026-02-25: Signup simplified to firstName, lastName, email, password only
 - 2026-02-25: All data scoped to userId (no organizationId)
-- 2026-02-25: Removed organizations table, organizationId from all tables
-- 2026-02-25: Sidebar shows user name only (no org name)
 - 2026-02-24: Stripe billing integration (checkout, portal, webhook sync)
 - 2026-02-23: Added landing page at "/" with features, how-it-works, pricing, testimonials, CTA sections
-- 2026-02-23: Password reset changed from token-in-console to 6-digit on-screen code (10 min expiry)
-- 2026-02-23: Added draft/published status for projects
-- 2026-02-23: Added source field to questions (form/widget) to separate them in public form
-- 2026-02-23: Added CORS support for widget and upvote endpoints
 
 ## Tech Stack
 - Frontend: React + Vite + Tailwind + shadcn/ui + wouter routing + TanStack Query
 - Backend: Express.js with PostgreSQL (Drizzle ORM)
 - Database: PostgreSQL (Neon-backed via Replit)
 - Auth: bcryptjs (password hashing), express-session + connect-pg-simple (sessions), crypto (reset tokens)
-- Payments: Stripe (checkout, subscriptions, billing portal, webhooks)
+- Payments: Stripe (checkout, subscriptions, billing portal, webhooks) — plans/subscriptions stored locally
 - AI: OpenAI GPT-4o Mini (via OPENAI_API_KEY secret)
 
 ## Project Architecture
-- `shared/schema.ts` - Drizzle schema: users, projects, questions, responses, answers, roadmapItems, changelogItems, ltdCodes
+- `shared/schema.ts` - Drizzle schema: users, plans, subscriptions, projects, questions, responses, answers, roadmapItems, changelogItems, ltdCodes
 - `server/auth.ts` - Session middleware (connect-pg-simple), requireAuth middleware, password hash/verify, reset token generation
-- `server/storage.ts` - DatabaseStorage class with all CRUD ops, userId-scoped queries
-- `server/routes.ts` - REST API endpoints under /api (auth + protected + public)
-- `server/stripeClient.ts` - Stripe client initialization
-- `server/webhookHandlers.ts` - Stripe webhook event handlers
-- `server/seed.ts` - Seeds demo user, 3 projects with questions, responses, roadmap, changelog
+- `server/storage.ts` - DatabaseStorage class with all CRUD ops, userId-scoped queries, plan/subscription methods
+- `server/routes.ts` - REST API endpoints under /api (auth + protected + public), isUserActivated() helper
+- `server/stripeClient.ts` - Stripe client initialization (via Replit connector)
+- `server/stripe-setup.ts` - Auto-creates Stripe product/prices on startup, links stripePriceId to plans table
+- `server/webhookHandlers.ts` - Stripe webhook handlers: checkout.session.completed, subscription.updated, subscription.deleted → writes to subscriptions table
+- `server/seed.ts` - Seeds plans (Monthly/Yearly), demo user, 3 projects with questions, responses, roadmap, changelog
 - `client/src/lib/auth.tsx` - AuthProvider context with user, useAuth hook, RequireAuth gate component
 - `client/src/pages/login.tsx` - Login page with email/password
 - `client/src/pages/signup.tsx` - Signup page with first/last name, email, password
@@ -68,41 +72,57 @@ FeedbackForge is a single-user SaaS feedback collection and management tool. Use
 - PATCH /api/auth/password - Change password (requires current password)
 - GET /api/projects - List user's projects
 - GET /api/projects/:id - Get project with questions (userId-checked)
-- POST /api/projects - Create project (userId-scoped, paywall-checked)
+- POST /api/projects - Create project (userId-scoped, paywall-checked via isUserActivated)
 - PATCH /api/projects/:id/status - Toggle project status (userId-checked)
 - DELETE /api/projects/:id - Delete project (userId-checked)
 - GET /api/projects/:id/responses - Responses for a project (userId-checked)
 - GET /api/responses - All user responses
 - GET /api/responses/:id - Single response (userId-checked via project)
-- POST /api/ai/summary - Generate AI summary (userId-scoped)
+- POST /api/ai/summary - Generate AI summary (paywall-checked via isUserActivated)
 - POST /api/roadmap/:slug/items - Create roadmap item (userId-checked)
 - POST /api/changelog/:slug/items - Create changelog item (userId-checked)
 - GET /api/ltd/codes - List user's LTD codes
 - POST /api/ltd/generate - Generate LTD code (userId-scoped)
 - POST /api/ltd/redeem - Redeem LTD code (userId-scoped)
-- GET /api/limits - Get user plan usage/limits
-- POST /api/billing/checkout - Create Stripe checkout session
-- GET /api/billing/status - Get current subscription status
-- GET /api/billing/history - Get payment history
+- GET /api/limits - Get user plan usage/limits (uses isUserActivated)
+- POST /api/billing/checkout - Create Stripe checkout session (uses plans table for stripePriceId)
+- GET /api/billing/status - Get subscription from local subscriptions table (joined with plans)
+- GET /api/billing/history - Get payment history (via Stripe API directly)
 - POST /api/billing/portal - Create Stripe billing portal session
 
 ### Public (no auth required)
 - GET /api/forms/:slug - Get form by slug
-- POST /api/forms/:slug/submit - Submit feedback
-- POST /api/widget/:slug/submit - Submit widget feedback
+- POST /api/forms/:slug/submit - Submit feedback (paywall-checked via isUserActivated)
+- POST /api/widget/:slug/submit - Submit widget feedback (paywall-checked via isUserActivated)
 - GET /api/roadmap/:slug - Get roadmap items
 - POST /api/roadmap/items/:id/upvote - Upvote roadmap item
 - GET /api/changelog/:slug - Get changelog items
 - GET /api/billing/config - Get Stripe publishable key
+- GET /api/plans - Get available plans (name, price, interval)
+
+## Database Schema
+- **users**: id, email, password, firstName, lastName, stripeCustomerId, resetToken, resetTokenExpiry, createdAt
+- **plans**: id, name (Monthly/Yearly), price (cents), interval (month/year), stripePriceId, createdAt
+- **subscriptions**: id, userId (FK→users), planId (FK→plans), stripeSubscriptionId, status (active/canceled/past_due), currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt
+- **projects**: id, name, description, status, slug, plan, userId (FK→users), createdAt
+- **questions**: id, projectId, label, type, required, options, order, source
+- **responses**: id, projectId, respondentName, respondentEmail, submittedAt
+- **answers**: id, responseId, questionId, value
+- **roadmapItems**: id, projectId, title, description, status, upvotes, order, createdAt
+- **changelogItems**: id, projectId, title, description, type, publishedAt
+- **ltdCodes**: id, code, isRedeemed, redeemedAt, userId, createdAt
 
 ## Pricing & Paywall (No Free Tier)
 - No free accounts: must be activated via paid plan or LTD code
 - Monthly plan: $29/month (Stripe Hosted Checkout)
 - Yearly plan: $249/year (Stripe Hosted Checkout)
 - Lifetime deal: Via redeemable codes generated in LTD admin page
+- Plans stored in local `plans` table with Stripe price IDs auto-created on startup
+- Subscriptions tracked in local `subscriptions` table (source of truth)
+- isUserActivated() helper checks: LTD codes → project plans → active subscription
 - PaywallGate component gates dashboard pages for non-activated users
 - Server-side enforcement on create/submit routes
-- Stripe webhook syncs subscription status to PostgreSQL
+- Stripe webhooks create/update subscription records in local DB
 
 ## User Preferences
 - None recorded yet

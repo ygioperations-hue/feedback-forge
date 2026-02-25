@@ -1,8 +1,17 @@
 import { db } from "./storage";
-import { users, projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
+import { users, plans, projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
 export async function seedDatabase() {
+  const existingPlans = await db.select().from(plans);
+  if (existingPlans.length === 0) {
+    await db.insert(plans).values([
+      { name: "Monthly", price: 2900, interval: "month" },
+      { name: "Yearly", price: 24900, interval: "year" },
+    ]);
+    console.log("Plans seeded: Monthly ($29/mo), Yearly ($249/yr)");
+  }
+
   const existingProjects = await db.select().from(projects);
   if (existingProjects.length > 0) return;
 

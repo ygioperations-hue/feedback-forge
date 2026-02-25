@@ -3,6 +3,8 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import {
   users,
+  plans,
+  subscriptions,
   projects,
   questions,
   responses,
@@ -12,6 +14,11 @@ import {
   ltdCodes,
   type User,
   type InsertUser,
+  type Plan,
+  type InsertPlan,
+  type Subscription,
+  type InsertSubscription,
+  type SubscriptionWithPlan,
   type Project,
   type InsertProject,
   type Question,
@@ -46,8 +53,18 @@ export interface IStorage {
   clearResetToken(userId: string): Promise<void>;
 
   updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<User>;
-  updateUserStripeSubscription(userId: string, stripeSubscriptionId: string | null): Promise<User>;
   getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | undefined>;
+
+  getPlans(): Promise<Plan[]>;
+  getPlanById(id: string): Promise<Plan | undefined>;
+  getPlanByInterval(interval: string): Promise<Plan | undefined>;
+  createPlan(plan: InsertPlan): Promise<Plan>;
+  updatePlanStripePriceId(id: string, stripePriceId: string): Promise<Plan>;
+
+  getActiveSubscription(userId: string): Promise<SubscriptionWithPlan | undefined>;
+  createSubscription(sub: InsertSubscription): Promise<Subscription>;
+  updateSubscriptionByStripeId(stripeSubId: string, data: Partial<Pick<Subscription, "status" | "currentPeriodStart" | "currentPeriodEnd" | "cancelAtPeriodEnd" | "planId">>): Promise<Subscription | undefined>;
+  getSubscriptionByStripeId(stripeSubId: string): Promise<Subscription | undefined>;
 
   getProjects(userId: string): Promise<Project[]>;
   getProject(id: string): Promise<ProjectWithQuestions | undefined>;
@@ -103,11 +120,6 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateUserStripeSubscription(userId: string, stripeSubscriptionId: string | null): Promise<User> {
-    const [updated] = await db.update(users).set({ stripeSubscriptionId }).where(eq(users.id, userId)).returning();
-    return updated;
-  }
-
   async getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.stripeCustomerId, stripeCustomerId));
     return user;
@@ -124,6 +136,69 @@ export class DatabaseStorage implements IStorage {
 
   async clearResetToken(userId: string): Promise<void> {
     await db.update(users).set({ resetToken: null, resetTokenExpiry: null }).where(eq(users.id, userId));
+  }
+
+  async getPlans(): Promise<Plan[]> {
+    return db.select().from(plans).orderBy(plans.price);
+  }
+
+  async getPlanById(id: string): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.id, id));
+    return plan;
+  }
+
+  async getPlanByInterval(interval: string): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.interval, interval));
+    return plan;
+  }
+
+  async createPlan(plan: InsertPlan): Promise<Plan> {
+    const [created] = await db.insert(plans).values(plan).returning();
+    return created;
+  }
+
+  async updatePlanStripePriceId(id: string, stripePriceId: string): Promise<Plan> {
+    const [updated] = await db.update(plans).set({ stripePriceId }).where(eq(plans.id, id)).returning();
+    return updated;
+  }
+
+  async getActiveSubscription(userId: string): Promise<SubscriptionWithPlan | undefined> {
+    const results = await db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.userId, userId),
+          sql`${subscriptions.status} IN ('active', 'trialing')`
+        )
+      );
+    if (results.length === 0) return undefined;
+    const sub = results[0];
+    const [plan] = await db.select().from(plans).where(eq(plans.id, sub.planId));
+    if (!plan) return undefined;
+    return { ...sub, plan };
+  }
+
+  async createSubscription(sub: InsertSubscription): Promise<Subscription> {
+    const [created] = await db.insert(subscriptions).values(sub).returning();
+    return created;
+  }
+
+  async updateSubscriptionByStripeId(
+    stripeSubId: string,
+    data: Partial<Pick<Subscription, "status" | "currentPeriodStart" | "currentPeriodEnd" | "cancelAtPeriodEnd" | "planId">>
+  ): Promise<Subscription | undefined> {
+    const [updated] = await db
+      .update(subscriptions)
+      .set(data)
+      .where(eq(subscriptions.stripeSubscriptionId, stripeSubId))
+      .returning();
+    return updated;
+  }
+
+  async getSubscriptionByStripeId(stripeSubId: string): Promise<Subscription | undefined> {
+    const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+    return sub;
   }
 
   async getProjects(userId: string): Promise<Project[]> {

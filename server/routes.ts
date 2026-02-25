@@ -7,8 +7,6 @@ import OpenAI from "openai";
 import rateLimit from "express-rate-limit";
 import { requireAuth, hashPassword, verifyPassword } from "./auth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
-import { sql } from "drizzle-orm";
-import { db } from "./storage";
 
 function p(val: string | string[]): string {
   return Array.isArray(val) ? val[0] : val;
@@ -137,6 +135,28 @@ const loginSchema = z.object({
   email: z.string().email().max(320),
   password: z.string().min(1).max(128),
 });
+
+async function isUserActivated(userId: string): Promise<{ activated: boolean; plan: string }> {
+  const userLtdCodes = await storage.getLtdCodes(userId);
+  const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
+  if (hasRedeemedCode) {
+    return { activated: true, plan: "lifetime" };
+  }
+
+  const allProjects = await storage.getProjects(userId);
+  const hasLifetime = allProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
+  if (hasLifetime) {
+    return { activated: true, plan: "lifetime" };
+  }
+
+  const activeSub = await storage.getActiveSubscription(userId);
+  if (activeSub) {
+    const subPlan = activeSub.plan.interval === "year" ? "yearly" : "monthly";
+    return { activated: true, plan: subPlan };
+  }
+
+  return { activated: false, plan: "none" };
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -381,26 +401,9 @@ export async function registerRoutes(
   app.post("/api/projects", requireAuth, async (req, res) => {
     try {
       const uid = req.session.userId!;
-      const allProjects = await storage.getProjects(uid);
-      const userLtdCodes = await storage.getLtdCodes(uid);
-      const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-      const hasLifetime = allProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
+      const { activated } = await isUserActivated(uid);
 
-      let hasActiveSubscription = false;
-      const user = await storage.getUserById(uid);
-      if (user?.stripeSubscriptionId) {
-        try {
-          const subResult = await db.execute(
-            sql`SELECT status FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
-          );
-          const sub = subResult.rows[0] as any;
-          if (sub && (sub.status === "active" || sub.status === "trialing")) {
-            hasActiveSubscription = true;
-          }
-        } catch {}
-      }
-
-      if (!hasLifetime && !hasRedeemedCode && !hasActiveSubscription) {
+      if (!activated) {
         return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
       }
 
@@ -537,27 +540,9 @@ export async function registerRoutes(
       }
 
       if (project.userId) {
-        const userProjects = await storage.getProjects(project.userId);
-        const userLtdCodes = await storage.getLtdCodes(project.userId);
-        const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-        const hasLifetime = userProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
-        if (!hasLifetime && !hasRedeemedCode) {
-          const owner = await storage.getUserById(project.userId);
-          let hasActiveSubscription = false;
-          if (owner?.stripeSubscriptionId) {
-            try {
-              const subResult = await db.execute(
-                sql`SELECT status FROM stripe.subscriptions WHERE id = ${owner.stripeSubscriptionId}`
-              );
-              const sub = subResult.rows[0] as any;
-              if (sub && (sub.status === "active" || sub.status === "trialing")) {
-                hasActiveSubscription = true;
-              }
-            } catch {}
-          }
-          if (!hasActiveSubscription) {
-            return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
-          }
+        const { activated } = await isUserActivated(project.userId);
+        if (!activated) {
+          return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
         }
       }
 
@@ -580,27 +565,9 @@ export async function registerRoutes(
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
 
       if (project.userId) {
-        const userProjects = await storage.getProjects(project.userId);
-        const userLtdCodes = await storage.getLtdCodes(project.userId);
-        const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-        const hasLifetime = userProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
-        if (!hasLifetime && !hasRedeemedCode) {
-          const owner = await storage.getUserById(project.userId);
-          let hasActiveSubscription = false;
-          if (owner?.stripeSubscriptionId) {
-            try {
-              const subResult = await db.execute(
-                sql`SELECT status FROM stripe.subscriptions WHERE id = ${owner.stripeSubscriptionId}`
-              );
-              const sub = subResult.rows[0] as any;
-              if (sub && (sub.status === "active" || sub.status === "trialing")) {
-                hasActiveSubscription = true;
-              }
-            } catch {}
-          }
-          if (!hasActiveSubscription) {
-            return res.status(403).json({ message: "Account not activated. Feedback collection is paused." });
-          }
+        const { activated } = await isUserActivated(project.userId);
+        if (!activated) {
+          return res.status(403).json({ message: "Account not activated. Feedback collection is paused." });
         }
       }
 
@@ -685,11 +652,8 @@ export async function registerRoutes(
   app.post("/api/ai/summary", requireAuth, aiLimiter, async (req, res) => {
     try {
       const uid = req.session.userId!;
-      const allProjects = await storage.getProjects(uid);
-      const userLtdCodes = await storage.getLtdCodes(uid);
-      const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-      const hasLifetime = allProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
-      if (!hasLifetime && !hasRedeemedCode) {
+      const { activated } = await isUserActivated(uid);
+      if (!activated) {
         return res.status(403).json({ message: "AI Insights requires an active plan. Upgrade to unlock." });
       }
 
@@ -699,6 +663,7 @@ export async function registerRoutes(
       }
 
       const openai = new OpenAI({ apiKey });
+      const allProjects = await storage.getProjects(uid);
       const allResponses = await storage.getResponses(uid);
 
       if (allResponses.length === 0) {
@@ -788,6 +753,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/plans", async (_req, res) => {
+    try {
+      const allPlans = await storage.getPlans();
+      res.json(allPlans.map(p => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        interval: p.interval,
+      })));
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch plans" });
+    }
+  });
+
   app.get("/api/billing/config", async (_req, res) => {
     try {
       const publishableKey = await getStripePublishableKey();
@@ -809,6 +788,12 @@ export async function registerRoutes(
       const user = await storage.getUserById(req.session.userId!);
       if (!user) return res.status(401).json({ message: "Not authenticated" });
 
+      const interval = parsed.data.plan === "monthly" ? "month" : "year";
+      const dbPlan = await storage.getPlanByInterval(interval);
+      if (!dbPlan || !dbPlan.stripePriceId) {
+        return res.status(400).json({ message: "No price found for selected plan. Please try again later." });
+      }
+
       const stripe = await getUncachableStripeClient();
 
       let customerId = user.stripeCustomerId;
@@ -822,42 +807,15 @@ export async function registerRoutes(
         customerId = customer.id;
       }
 
-      const pricesResult = await db.execute(
-        sql`SELECT p.id as price_id, p.unit_amount, p.currency, p.recurring, p.metadata
-            FROM stripe.prices p
-            JOIN stripe.products pr ON p.product = pr.id
-            WHERE pr.active = true AND p.active = true`
-      );
-
-      const prices = pricesResult.rows;
-      let targetPrice: any = null;
-
-      for (const price of prices) {
-        const recurring = typeof price.recurring === 'string' ? JSON.parse(price.recurring) : price.recurring;
-
-        if (parsed.data.plan === "monthly" && recurring?.interval === "month") {
-          targetPrice = price;
-          break;
-        }
-        if (parsed.data.plan === "yearly" && recurring?.interval === "year") {
-          targetPrice = price;
-          break;
-        }
-      }
-
-      if (!targetPrice) {
-        return res.status(400).json({ message: "No price found for selected plan. Please try again later." });
-      }
-
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
-        line_items: [{ price: targetPrice.price_id, quantity: 1 }],
+        line_items: [{ price: dbPlan.stripePriceId, quantity: 1 }],
         mode: 'subscription',
         success_url: `${baseUrl}/billing?success=true`,
         cancel_url: `${baseUrl}/#pricing`,
-        metadata: { userId: user.id, plan: parsed.data.plan },
+        metadata: { userId: user.id, planId: dbPlan.id, plan: parsed.data.plan },
       });
 
       res.json({ url: session.url });
@@ -872,20 +830,23 @@ export async function registerRoutes(
       const user = await storage.getUserById(req.session.userId!);
       if (!user) return res.status(401).json({ message: "Not authenticated" });
 
-      if (!user.stripeSubscriptionId) {
+      const activeSub = await storage.getActiveSubscription(user.id);
+      if (!activeSub) {
         return res.json({ subscription: null });
       }
 
-      const subResult = await db.execute(
-        sql`SELECT * FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
-      );
-
-      const subscription = subResult.rows[0] || null;
-      if (!subscription) {
-        return res.json({ subscription: null });
-      }
-
-      res.json({ subscription });
+      res.json({
+        subscription: {
+          id: activeSub.id,
+          status: activeSub.status,
+          planName: activeSub.plan.name,
+          planPrice: activeSub.plan.price,
+          interval: activeSub.plan.interval,
+          currentPeriodStart: activeSub.currentPeriodStart?.toISOString() || null,
+          currentPeriodEnd: activeSub.currentPeriodEnd?.toISOString() || null,
+          cancelAtPeriodEnd: activeSub.cancelAtPeriodEnd,
+        },
+      });
     } catch (err) {
       console.error("Billing status error:", err);
       res.status(500).json({ message: "Failed to fetch billing status" });
@@ -901,14 +862,26 @@ export async function registerRoutes(
         return res.json({ payments: [] });
       }
 
-      const paymentsResult = await db.execute(
-        sql`SELECT * FROM stripe.payment_intents
-            WHERE customer = ${user.stripeCustomerId}
-            ORDER BY created DESC
-            LIMIT 50`
-      );
+      try {
+        const stripe = await getUncachableStripeClient();
+        const paymentIntents = await stripe.paymentIntents.list({
+          customer: user.stripeCustomerId,
+          limit: 50,
+        });
 
-      res.json({ payments: paymentsResult.rows });
+        const payments = paymentIntents.data.map((pi: any) => ({
+          id: pi.id,
+          amount: pi.amount,
+          currency: pi.currency,
+          status: pi.status,
+          created: pi.created,
+        }));
+
+        res.json({ payments });
+      } catch (stripeErr: any) {
+        console.error("Stripe payment history error:", stripeErr?.message);
+        res.json({ payments: [] });
+      }
     } catch (err) {
       console.error("Payment history error:", err);
       res.status(500).json({ message: "Failed to fetch payment history" });
@@ -983,34 +956,9 @@ export async function registerRoutes(
       for (const proj of userProjects) {
         totalResponses += await storage.getResponseCountByProject(proj.id);
       }
-      const userLtdCodes = await storage.getLtdCodes(uid);
-      const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-      const hasLifetime = userProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
 
-      let hasActiveSubscription = false;
-      let subscriptionPlan = "none";
-      if (user.stripeSubscriptionId) {
-        try {
-          const subResult = await db.execute(
-            sql`SELECT status, items FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId}`
-          );
-          const sub = subResult.rows[0] as any;
-          if (sub && (sub.status === "active" || sub.status === "trialing")) {
-            hasActiveSubscription = true;
-            const items = typeof sub.items === 'string' ? JSON.parse(sub.items) : sub.items;
-            const priceData = items?.data?.[0]?.price;
-            const recurring = priceData?.recurring;
-            if (recurring?.interval === "year") {
-              subscriptionPlan = "yearly";
-            } else {
-              subscriptionPlan = "monthly";
-            }
-          }
-        } catch {}
-      }
+      const { activated, plan } = await isUserActivated(uid);
 
-      const activated = hasLifetime || hasRedeemedCode || hasActiveSubscription;
-      const plan = hasLifetime || hasRedeemedCode ? "lifetime" : hasActiveSubscription ? subscriptionPlan : "none";
       res.json({
         plan,
         activated,
