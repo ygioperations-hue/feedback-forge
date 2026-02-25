@@ -302,12 +302,14 @@ export default function Billing() {
                 </CardContent>
               </Card>
 
-              <a href="/#pricing">
-                <Button data-testid="button-update-payment">
-                  <CreditCard className="w-4 h-4 mr-2" />
-                  Update Payment Method
-                </Button>
-              </a>
+              <div className="pt-1">
+                <a href="/#pricing">
+                  <Button data-testid="button-update-payment">
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Update Payment Method
+                  </Button>
+                </a>
+              </div>
             </div>
           ) : subscription && subscription.status === "canceled" ? (
             <div className="space-y-4">
@@ -340,12 +342,14 @@ export default function Billing() {
                 </CardContent>
               </Card>
 
-              <a href="/#pricing">
-                <Button data-testid="button-resubscribe">
-                  <Crown className="w-4 h-4 mr-2" />
-                  Subscribe Again
-                </Button>
-              </a>
+              <div className="pt-1">
+                <a href="/#pricing">
+                  <Button data-testid="button-resubscribe">
+                    <Crown className="w-4 h-4 mr-2" />
+                    Subscribe Again
+                  </Button>
+                </a>
+              </div>
             </div>
           ) : limits?.plan === "lifetime" ? (
             <div className="flex items-center gap-3">
