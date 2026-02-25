@@ -1,5 +1,5 @@
 import { db } from "./storage";
-import { organizations, users, projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
+import { users, projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
 export async function seedDatabase() {
@@ -8,36 +8,16 @@ export async function seedDatabase() {
 
   const existingUsers = await db.select().from(users);
   let userId: string;
-  let orgId: string;
 
   if (existingUsers.length > 0) {
     userId = existingUsers[0].id;
-    orgId = existingUsers[0].organizationId || "";
-    if (!orgId) {
-      const [org] = await db.insert(organizations).values({
-        name: "Demo Company",
-        slug: "demo-company",
-      }).returning();
-      orgId = org.id;
-      await db.update(users).set({ organizationId: orgId }).where(
-        (await import("drizzle-orm")).eq(users.id, userId)
-      );
-    }
   } else {
-    const [org] = await db.insert(organizations).values({
-      name: "Demo Company",
-      slug: "demo-company",
-    }).returning();
-    orgId = org.id;
-
     const hashedPassword = await bcrypt.hash("password123", 10);
     const [user] = await db.insert(users).values({
       email: "demo@feedbackforge.app",
       password: hashedPassword,
       firstName: "Demo",
       lastName: "User",
-      role: "admin",
-      organizationId: orgId,
     }).returning();
     userId = user.id;
   }
@@ -48,7 +28,6 @@ export async function seedDatabase() {
     slug: "website-redesign-feedback",
     status: "active",
     userId,
-    organizationId: orgId,
   }).returning();
 
   const [p2] = await db.insert(projects).values({
@@ -57,7 +36,6 @@ export async function seedDatabase() {
     slug: "customer-support-survey",
     status: "active",
     userId,
-    organizationId: orgId,
   }).returning();
 
   const [p3] = await db.insert(projects).values({
@@ -66,7 +44,6 @@ export async function seedDatabase() {
     slug: "feature-prioritization",
     status: "active",
     userId,
-    organizationId: orgId,
   }).returning();
 
   const [q1a] = await db.insert(questions).values({ projectId: p1.id, label: "How would you rate the overall design?", type: "rating", required: true, order: 0 }).returning();

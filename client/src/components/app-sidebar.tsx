@@ -1,4 +1,4 @@
-import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User, CreditCard, Building2 } from "lucide-react";
+import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User, CreditCard } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
@@ -25,7 +25,7 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, organization, logout, isLoggingOut } = useAuth();
+  const { user, logout, isLoggingOut } = useAuth();
 
   return (
     <Sidebar data-testid="sidebar-nav">
@@ -36,12 +36,6 @@ export function AppSidebar() {
           </div>
           <div className="min-w-0">
             <span className="text-sm font-semibold tracking-tight block truncate" data-testid="text-sidebar-brand">FeedbackForge</span>
-            {organization && (
-              <span className="text-xs text-muted-foreground block truncate" data-testid="text-sidebar-org">
-                <Building2 className="w-3 h-3 inline mr-1" />
-                {organization.name}
-              </span>
-            )}
           </div>
         </div>
       </SidebarHeader>

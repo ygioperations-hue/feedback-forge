@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -7,33 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquareText, Loader2, Globe } from "lucide-react";
-
-function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .substring(0, 60);
-}
+import { MessageSquareText, Loader2 } from "lucide-react";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [companyName, setCompanyName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const subdomainPreview = useMemo(() => generateSlug(companyName), [companyName]);
-
   const signupMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/auth/signup", {
-        companyName,
         firstName,
         lastName,
         email,
@@ -75,33 +61,16 @@ export default function Signup() {
             <MessageSquareText className="w-6 h-6 text-primary-foreground" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-signup-title">FeedbackForge</h1>
-          <p className="text-sm text-muted-foreground">Create your organization account</p>
+          <p className="text-sm text-muted-foreground">Create your account</p>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Get started</CardTitle>
-            <CardDescription>Set up your organization to begin collecting feedback</CardDescription>
+            <CardDescription>Sign up to begin collecting feedback</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Company Name</Label>
-                <Input
-                  id="companyName"
-                  placeholder="Acme Corp"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  required
-                  data-testid="input-company-name"
-                />
-                {subdomainPreview && (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="text-subdomain-preview">
-                    <Globe className="w-3 h-3" />
-                    <span>Your subdomain: <span className="font-medium text-foreground">{subdomainPreview}</span></span>
-                  </div>
-                )}
-              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>

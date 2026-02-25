@@ -14,7 +14,6 @@ const sessionPool = new pg.Pool({
 declare module "express-session" {
   interface SessionData {
     userId: string;
-    organizationId: string;
   }
 }
 

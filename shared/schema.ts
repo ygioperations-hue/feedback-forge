@@ -3,21 +3,12 @@ import { pgTable, text, varchar, integer, boolean, timestamp, jsonb } from "driz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const organizations = pgTable("organizations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  role: text("role").notNull().default("admin"),
-  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   resetToken: text("reset_token"),
@@ -33,7 +24,6 @@ export const projects = pgTable("projects", {
   slug: text("slug").notNull().unique(),
   plan: text("plan").notNull().default("free"),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
-  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -89,11 +79,9 @@ export const ltdCodes = pgTable("ltd_codes", {
   isRedeemed: boolean("is_redeemed").notNull().default(false),
   redeemedAt: timestamp("redeemed_at"),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
-  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, resetToken: true, resetTokenExpiry: true, stripeCustomerId: true, stripeSubscriptionId: true });
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
 export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
@@ -103,8 +91,6 @@ export const insertRoadmapItemSchema = createInsertSchema(roadmapItems).omit({ i
 export const insertChangelogItemSchema = createInsertSchema(changelogItems).omit({ id: true });
 export const insertLtdCodeSchema = createInsertSchema(ltdCodes).omit({ id: true, createdAt: true, isRedeemed: true, redeemedAt: true });
 
-export type Organization = typeof organizations.$inferSelect;
-export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Project = typeof projects.$inferSelect;
