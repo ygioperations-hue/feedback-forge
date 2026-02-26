@@ -14,6 +14,8 @@ process.on("unhandledRejection", (reason) => {
   console.error("UNHANDLED REJECTION:", reason);
 });
 
+process.on("SIGHUP", () => {});
+
 const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
