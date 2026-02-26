@@ -5,7 +5,7 @@ import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRo
 import { z } from "zod";
 import OpenAI from "openai";
 import rateLimit from "express-rate-limit";
-import { requireAuth, hashPassword, verifyPassword } from "./auth";
+import { requireAuth, requirePlatformAdmin, requireActivePlan, hashPassword, verifyPassword, setUserLookup } from "./auth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function p(val: string | string[]): string {
@@ -137,22 +137,15 @@ const loginSchema = z.object({
 });
 
 async function isUserActivated(userId: string): Promise<{ activated: boolean; plan: string }> {
-  const userLtdCodes = await storage.getLtdCodes(userId);
-  const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
-  if (hasRedeemedCode) {
+  const user = await storage.getUserById(userId);
+  if (!user) return { activated: false, plan: "none" };
+
+  if (user.role === "platform_admin") {
     return { activated: true, plan: "lifetime" };
   }
 
-  const allProjects = await storage.getProjects(userId);
-  const hasLifetime = allProjects.some(proj => proj.plan === "lifetime" || proj.plan === "paid");
-  if (hasLifetime) {
-    return { activated: true, plan: "lifetime" };
-  }
-
-  const activeSub = await storage.getActiveSubscription(userId);
-  if (activeSub) {
-    const subPlan = activeSub.plan.interval === "year" ? "yearly" : "monthly";
-    return { activated: true, plan: subPlan };
+  if (user.planType !== "none") {
+    return { activated: true, plan: user.planType };
   }
 
   return { activated: false, plan: "none" };
@@ -162,6 +155,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  setUserLookup((id: string) => storage.getUserById(id));
 
   app.post("/api/auth/signup", authLimiter, async (req, res) => {
     try {
@@ -193,7 +188,7 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to create account" });
         }
         res.status(201).json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
         });
       });
     } catch (err: any) {
@@ -231,7 +226,7 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to log in" });
         }
         res.json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
         });
       });
     } catch (err) {
@@ -261,7 +256,7 @@ export async function registerRoutes(
     }
 
     res.json({
-      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
     });
   });
 

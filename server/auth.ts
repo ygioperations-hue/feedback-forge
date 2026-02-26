@@ -4,6 +4,7 @@ import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import type { User } from "@shared/schema";
 
 const PgSession = connectPgSimple(session);
 
@@ -15,6 +16,21 @@ declare module "express-session" {
   interface SessionData {
     userId: string;
   }
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: User;
+    }
+  }
+}
+
+type UserLookup = (id: string) => Promise<User | undefined>;
+let _getUserById: UserLookup | null = null;
+
+export function setUserLookup(fn: UserLookup) {
+  _getUserById = fn;
 }
 
 export const sessionMiddleware = session({
@@ -34,9 +50,43 @@ export const sessionMiddleware = session({
   },
 });
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     return res.status(401).json({ message: "Not authenticated" });
+  }
+
+  if (!_getUserById) {
+    return res.status(500).json({ message: "Server not ready" });
+  }
+
+  try {
+    const user = await _getUserById(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    req.user = user;
+    next();
+  } catch {
+    return res.status(500).json({ message: "Authentication error" });
+  }
+}
+
+export function requirePlatformAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || req.user.role !== "platform_admin") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  next();
+}
+
+export function requireActivePlan(req: Request, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  if (req.user.role === "platform_admin") {
+    return next();
+  }
+  if (req.user.planType === "none") {
+    return res.status(403).json({ message: "Active plan required" });
   }
   next();
 }
