@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { AuthProvider, RequireAuth } from "@/lib/auth";
+import { AuthProvider, RequireAuth, useAuth } from "@/lib/auth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
@@ -23,7 +23,6 @@ import ResponseDetail from "@/pages/response-detail";
 import PublicRoadmap from "@/pages/public-roadmap";
 import PublicChangelog from "@/pages/public-changelog";
 import Pricing from "@/pages/pricing";
-import LtdAdmin from "@/pages/ltd-admin";
 import Profile from "@/pages/profile";
 import Billing from "@/pages/billing";
 import Login from "@/pages/login";
@@ -56,6 +55,20 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function RequireCustomer({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (user?.role === "platform_admin") return <Redirect to="/admin" />;
+  return <>{children}</>;
+}
+
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (user?.role !== "platform_admin") return <Redirect to="/dashboard" />;
+  return <>{children}</>;
+}
+
 function Router() {
   return (
     <Switch>
@@ -68,40 +81,37 @@ function Router() {
       <Route path="/changelog/:slug" component={PublicChangelog} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/dashboard">
-        <AppLayout><Dashboard /></AppLayout>
+        <AppLayout><RequireCustomer><Dashboard /></RequireCustomer></AppLayout>
       </Route>
       <Route path="/projects">
-        <AppLayout><Projects /></AppLayout>
+        <AppLayout><RequireCustomer><Projects /></RequireCustomer></AppLayout>
       </Route>
       <Route path="/projects/new">
-        <AppLayout><ProjectNew /></AppLayout>
+        <AppLayout><RequireCustomer><ProjectNew /></RequireCustomer></AppLayout>
       </Route>
       <Route path="/projects/:id">
-        <AppLayout><ProjectDetail /></AppLayout>
+        <AppLayout><RequireCustomer><ProjectDetail /></RequireCustomer></AppLayout>
       </Route>
       <Route path="/responses">
-        <AppLayout><ResponsesList /></AppLayout>
+        <AppLayout><RequireCustomer><ResponsesList /></RequireCustomer></AppLayout>
       </Route>
       <Route path="/responses/:id">
-        <AppLayout><ResponseDetail /></AppLayout>
-      </Route>
-      <Route path="/ltd-admin">
-        <AppLayout><LtdAdmin /></AppLayout>
+        <AppLayout><RequireCustomer><ResponseDetail /></RequireCustomer></AppLayout>
       </Route>
       <Route path="/profile">
         <AppLayout><Profile /></AppLayout>
       </Route>
       <Route path="/billing">
-        <AppLayout><Billing /></AppLayout>
+        <AppLayout><RequireCustomer><Billing /></RequireCustomer></AppLayout>
       </Route>
       <Route path="/admin">
-        <AppLayout><AdminDashboard /></AppLayout>
+        <AppLayout><RequireAdmin><AdminDashboard /></RequireAdmin></AppLayout>
       </Route>
       <Route path="/admin/users">
-        <AppLayout><AdminUsers /></AppLayout>
+        <AppLayout><RequireAdmin><AdminUsers /></RequireAdmin></AppLayout>
       </Route>
       <Route path="/admin/ltd">
-        <AppLayout><AdminLtd /></AppLayout>
+        <AppLayout><RequireAdmin><AdminLtd /></RequireAdmin></AppLayout>
       </Route>
       <Route>
         <AppLayout><NotFound /></AppLayout>
