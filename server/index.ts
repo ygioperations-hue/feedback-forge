@@ -7,7 +7,6 @@ import { WebhookHandlers } from "./webhookHandlers";
 import { ensureStripePrices } from "./stripe-setup";
 
 const app = express();
-app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {
