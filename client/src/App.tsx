@@ -13,6 +13,7 @@ import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import AdminDashboard from "@/pages/admin-dashboard";
 import AdminUsers from "@/pages/admin-users";
+import AdminLtd from "@/pages/admin-ltd";
 import Projects from "@/pages/projects";
 import ProjectNew from "@/pages/project-new";
 import ProjectDetail from "@/pages/project-detail";
@@ -98,6 +99,9 @@ function Router() {
       </Route>
       <Route path="/admin/users">
         <AppLayout><AdminUsers /></AppLayout>
+      </Route>
+      <Route path="/admin/ltd">
+        <AppLayout><AdminLtd /></AppLayout>
       </Route>
       <Route>
         <AppLayout><NotFound /></AppLayout>
