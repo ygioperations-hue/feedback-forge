@@ -53,6 +53,7 @@ export interface IStorage {
   clearResetToken(userId: string): Promise<void>;
 
   updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<User>;
+  updateUserPlanType(userId: string, planType: string): Promise<User>;
   getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | undefined>;
 
   getPlans(): Promise<Plan[]>;
@@ -118,6 +119,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<User> {
     const [updated] = await db.update(users).set({ stripeCustomerId }).where(eq(users.id, userId)).returning();
+    return updated;
+  }
+
+  async updateUserPlanType(userId: string, planType: string): Promise<User> {
+    const [updated] = await db.update(users).set({ planType }).where(eq(users.id, userId)).returning();
     return updated;
   }
 

@@ -1027,6 +1027,7 @@ export async function registerRoutes(
       const redeemed = await storage.redeemLtdCode(parsed.data.code, uid);
       if (!redeemed) return res.status(400).json({ message: "Invalid or already redeemed code" });
       await storage.upgradeAllProjectsToLifetime(uid);
+      await storage.updateUserPlanType(uid, 'lifetime');
       res.json(redeemed);
     } catch (err) {
       res.status(500).json({ message: "Failed to redeem code" });

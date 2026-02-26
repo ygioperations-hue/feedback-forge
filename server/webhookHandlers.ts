@@ -133,6 +133,15 @@ export class WebhookHandlers {
       cancelAtPeriodEnd: false,
     });
 
+    if (user.planType !== 'lifetime') {
+      const plan = await storage.getPlanById(planId);
+      if (plan) {
+        const newPlanType = plan.interval === 'year' ? 'yearly' : 'monthly';
+        await storage.updateUserPlanType(user.id, newPlanType);
+        console.log(`Updated user ${user.id} planType to ${newPlanType}`);
+      }
+    }
+
     console.log(`Created subscription for user ${user.id}: ${stripeSubscriptionId}`);
   }
 
@@ -181,6 +190,13 @@ export class WebhookHandlers {
               currentPeriodEnd: periodEnd,
               cancelAtPeriodEnd,
             });
+
+            if (user.planType !== 'lifetime') {
+              const newPlanType = matchedPlan.interval === 'year' ? 'yearly' : 'monthly';
+              await storage.updateUserPlanType(user.id, newPlanType);
+              console.log(`Updated user ${user.id} planType to ${newPlanType}`);
+            }
+
             console.log(`Created subscription from update event for user ${user.id}: ${stripeSubId}`);
           }
         }
@@ -213,11 +229,26 @@ export class WebhookHandlers {
     }
 
     await storage.updateSubscriptionByStripeId(stripeSubId, updateData);
+
+    if (customerId && updateData.planId) {
+      const user = await storage.getUserByStripeCustomerId(customerId);
+      if (user && user.planType !== 'lifetime') {
+        const plans = await storage.getPlans();
+        const newPlan = plans.find(p => p.id === updateData.planId);
+        if (newPlan) {
+          const newPlanType = newPlan.interval === 'year' ? 'yearly' : 'monthly';
+          await storage.updateUserPlanType(user.id, newPlanType);
+          console.log(`Updated user ${user.id} planType to ${newPlanType} on plan switch`);
+        }
+      }
+    }
+
     console.log(`Updated subscription ${stripeSubId}: status=${status}, cancelAtPeriodEnd=${cancelAtPeriodEnd}`);
   }
 
   static async handleSubscriptionDeleted(data: any): Promise<void> {
     const stripeSubId = data.id;
+    const customerId = data.customer;
 
     const existing = await storage.getSubscriptionByStripeId(stripeSubId);
     if (!existing) {
@@ -229,6 +260,14 @@ export class WebhookHandlers {
       status: 'canceled',
       cancelAtPeriodEnd: false,
     });
+
+    if (customerId) {
+      const user = await storage.getUserByStripeCustomerId(customerId);
+      if (user && user.planType !== 'lifetime') {
+        await storage.updateUserPlanType(user.id, 'none');
+        console.log(`Set user ${user.id} planType to none after subscription deletion`);
+      }
+    }
 
     console.log(`Canceled subscription ${stripeSubId}`);
   }
