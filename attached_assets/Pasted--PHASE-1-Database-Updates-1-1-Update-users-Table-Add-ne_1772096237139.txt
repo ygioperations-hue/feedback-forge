@@ -1,0 +1,351 @@
+✅ PHASE 1 — Database Updates
+1.1 Update users Table
+
+Add new columns:
+
+ALTER TABLE users
+ADD COLUMN role TEXT DEFAULT 'customer',
+ADD COLUMN plan_type TEXT DEFAULT 'none';
+
+Allowed values:
+
+role: customer, platform_admin
+
+plan_type: none, monthly, yearly, lifetime
+
+1.2 Promote Your Account to Platform Admin
+
+Manually update your account:
+
+UPDATE users
+SET role = 'platform_admin'
+WHERE email = 'your-email@example.com';
+
+Verify only one account has platform_admin.
+
+1.3 Verify Project Isolation
+
+Ensure projects table has:
+
+user_id UUID REFERENCES users(id)
+
+All queries must filter by:
+
+WHERE user_id = current_user_id
+✅ PHASE 2 — Role-Based Middleware
+
+Create two middleware functions:
+
+2.1 Require Authentication
+function requireAuth(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+2.2 Require Platform Admin
+function requirePlatformAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'platform_admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+}
+2.3 Update Paywall Middleware
+function requireActivePlan(req, res, next) {
+  if (req.user.role === 'platform_admin') return next();
+
+  if (req.user.plan_type === 'none') {
+    return res.status(403).json({ error: 'Plan required' });
+  }
+
+  next();
+}
+
+Apply this to:
+
+Project creation
+
+AI summary
+
+Widget generation
+
+Dashboard routes
+
+✅ PHASE 3 — Route Separation
+CUSTOMER ROUTES
+
+Protect with:
+
+requireAuth
+requireActivePlan
+
+Routes:
+
+/dashboard
+/projects
+/projects/:id
+/billing
+
+Public routes remain open:
+
+/roadmap/:slug
+/changelog/:slug
+PLATFORM ADMIN ROUTES
+
+Create route group:
+
+/admin
+/admin/users
+/admin/ltd
+/admin/analytics
+
+Protect with:
+
+requireAuth
+requirePlatformAdmin
+
+Never rely on frontend hiding only.
+
+✅ PHASE 4 — Sidebar Separation
+4.1 Customer Sidebar
+
+Show only if:
+
+user.role === 'customer'
+
+Items:
+
+Dashboard
+
+Projects
+
+Responses
+
+Billing
+
+Settings
+
+4.2 Platform Admin Sidebar
+
+Show only if:
+
+user.role === 'platform_admin'
+
+Items:
+
+Admin Dashboard
+
+Users
+
+LTD Codes
+
+Global Analytics
+
+Do NOT mix menus.
+
+✅ PHASE 5 — Move LTD System to Platform Admin
+5.1 Remove LTD Section from Customer Sidebar
+
+Customers should only see:
+
+Redeem code input on Pricing page
+
+They should NOT:
+
+Generate codes
+
+View code usage
+
+See total LTD stats
+
+5.2 Create Admin LTD Management Page
+
+Route:
+
+/admin/ltd
+
+Display:
+
+Total codes
+
+Used codes
+
+Unused codes
+
+Code table:
+
+Code
+
+Used?
+
+Used by
+
+Date used
+
+Actions:
+
+Generate new code
+
+Delete unused code
+
+5.3 Redemption Endpoint (Customer-Facing)
+POST /api/ltd/redeem
+
+Logic:
+
+Validate code exists
+
+Validate is_used = false
+
+Update:
+
+user.plan_type = 'lifetime'
+ltd_codes.is_used = true
+ltd_codes.used_by_user_id = user.id
+
+Return success.
+
+✅ PHASE 6 — Stripe Isolation
+
+Ensure:
+
+Platform admin cannot access billing page
+
+Stripe only applies to customers
+
+Stripe webhook updates:
+
+plan_type = monthly OR yearly
+
+Never override:
+
+plan_type = lifetime
+
+On cancellation:
+
+plan_type = none
+
+Unless lifetime.
+
+✅ PHASE 7 — Admin Dashboard
+7.1 /admin Overview Page
+
+Display:
+
+Total Users
+
+Active Subscriptions
+
+Lifetime Users
+
+Total Projects
+
+Total Feedback Count
+
+MRR (if Stripe active)
+
+7.2 /admin/users Page
+
+Table:
+
+Email
+
+Role
+
+Plan Type
+
+Projects Count
+
+Joined Date
+
+Actions:
+
+View Projects (read-only)
+
+Change Plan
+
+Suspend
+
+Delete
+
+✅ PHASE 8 — Data Isolation Enforcement
+
+Audit all queries.
+
+Customer queries must include:
+
+WHERE user_id = current_user_id
+
+Never allow:
+
+SELECT * FROM projects;
+
+Unless:
+
+user.role === 'platform_admin'
+
+Even then:
+Prefer read-only mode.
+
+✅ PHASE 9 — Testing Checklist
+
+Test as CUSTOMER:
+
+Cannot access /admin
+
+Cannot see LTD management
+
+Cannot query other users’ projects
+
+Cannot bypass paywall
+
+Test as PLATFORM ADMIN:
+
+Can access /admin
+
+Can generate LTD codes
+
+Can view all users
+
+Bypasses paywall
+
+Cannot accidentally subscribe via Stripe
+
+✅ PHASE 10 — Security Hardening
+
+Implement:
+
+Role-based server checks
+
+Rate limit admin endpoints
+
+Log admin actions:
+
+Code generation
+
+Plan change
+
+User deletion
+
+Prevent admin deletion of own account
+
+✅ FINAL STRUCTURE
+
+FeedbackForge
+
+Platform
+└── Platform Admin
+├── Users
+├── LTD Codes
+├── Analytics
+├── System Management
+
+Customers
+└── Individual Workspace
+├── Projects
+├── Feedback
+├── Roadmap
+├── AI Insights
+├── Billing
+
+Clean separation.
+No confusion.
+True SaaS model.

@@ -27,6 +27,8 @@ export async function seedDatabase() {
       password: hashedPassword,
       firstName: "Demo",
       lastName: "User",
+      role: "platform_admin",
+      planType: "lifetime",
     }).returning();
     userId = user.id;
   }
