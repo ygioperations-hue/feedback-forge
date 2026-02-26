@@ -1,4 +1,4 @@
-import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User, CreditCard } from "lucide-react";
+import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User, CreditCard, Users, Shield } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
@@ -15,17 +15,25 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
-const navItems = [
+const customerNavItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderPlus },
   { title: "Responses", url: "/responses", icon: MessageSquareText },
   { title: "Billing", url: "/billing", icon: CreditCard },
-  { title: "LTD Codes", url: "/ltd-admin", icon: Crown },
+];
+
+const adminNavItems = [
+  { title: "Admin Dashboard", url: "/admin", icon: Shield },
+  { title: "Users", url: "/admin/users", icon: Users },
+  { title: "LTD Codes", url: "/admin/ltd", icon: Crown },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout, isLoggingOut } = useAuth();
+
+  const isAdmin = user?.role === "platform_admin";
+  const navItems = isAdmin ? adminNavItems : customerNavItems;
 
   return (
     <Sidebar data-testid="sidebar-nav">
@@ -41,12 +49,12 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>{isAdmin ? "Admin" : "Navigation"}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url}>
+                  <SidebarMenuButton asChild isActive={location === item.url || (item.url !== "/admin" && location.startsWith(item.url))}>
                     <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
                       <item.icon className="w-4 h-4" />
                       <span>{item.title}</span>
