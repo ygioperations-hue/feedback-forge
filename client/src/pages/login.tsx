@@ -22,7 +22,11 @@ export default function Login() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/auth/me"], data);
-      setLocation("/dashboard");
+      if (data?.user?.role === "platform_admin") {
+        setLocation("/admin");
+      } else {
+        setLocation("/dashboard");
+      }
     },
     onError: (err: Error) => {
       toast({

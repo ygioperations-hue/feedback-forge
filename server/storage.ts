@@ -277,7 +277,9 @@ export class DatabaseStorage implements IStorage {
     const projectIds = userProjects.map((p) => p.id);
     if (projectIds.length === 0) return [];
     const allResponses = await db.select().from(responses).where(inArray(responses.projectId, projectIds)).orderBy(responses.submittedAt);
-    const allAnswers = await db.select().from(answers);
+    if (allResponses.length === 0) return [];
+    const responseIds = allResponses.map((r) => r.id);
+    const allAnswers = await db.select().from(answers).where(inArray(answers.responseId, responseIds));
     return allResponses.map((r) => ({
       ...r,
       answers: allAnswers.filter((a) => a.responseId === r.id),
@@ -290,7 +292,7 @@ export class DatabaseStorage implements IStorage {
     const responseAnswers = await db.select().from(answers).where(eq(answers.responseId, id));
     const questionIds = responseAnswers.map((a) => a.questionId);
     const qs = questionIds.length > 0
-      ? await db.select().from(questions)
+      ? await db.select().from(questions).where(inArray(questions.id, questionIds))
       : [];
     const qMap = new Map(qs.map((q) => [q.id, q]));
     return {
@@ -306,7 +308,7 @@ export class DatabaseStorage implements IStorage {
     const projectResponses = await db.select().from(responses).where(eq(responses.projectId, projectId)).orderBy(responses.submittedAt);
     const responseIds = projectResponses.map((r) => r.id);
     if (responseIds.length === 0) return [];
-    const allAnswers = await db.select().from(answers);
+    const allAnswers = await db.select().from(answers).where(inArray(answers.responseId, responseIds));
     return projectResponses.map((r) => ({
       ...r,
       answers: allAnswers.filter((a) => a.responseId === r.id),
