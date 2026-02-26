@@ -8,6 +8,8 @@ type AuthUser = {
   email: string;
   firstName: string;
   lastName: string;
+  role: string;
+  planType: string;
 };
 
 type AuthData = {

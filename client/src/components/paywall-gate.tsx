@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Crown, Lock, Zap, BarChart3, Map, FileText, Code, Sparkles } from "lucide-react";
 import { Link } from "wouter";
+import { useAuth } from "@/lib/auth";
 
 type LimitsData = {
   plan: string;
@@ -16,19 +17,27 @@ type LimitsData = {
 };
 
 export function useActivation() {
+  const { user } = useAuth();
   const { data: limits, isLoading } = useQuery<LimitsData>({
     queryKey: ["/api/limits"],
   });
+
+  if (user?.role === "platform_admin") {
+    return { limits, isLoading: false, activated: true };
+  }
+
   return {
     limits,
     isLoading,
-    activated: limits?.activated ?? false,
+    activated: user?.planType !== "none" && user?.planType !== undefined,
   };
 }
 
 export function PaywallGate({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const { activated, isLoading } = useActivation();
 
+  if (user?.role === "platform_admin") return <>{children}</>;
   if (isLoading) return null;
   if (activated) return <>{children}</>;
 
