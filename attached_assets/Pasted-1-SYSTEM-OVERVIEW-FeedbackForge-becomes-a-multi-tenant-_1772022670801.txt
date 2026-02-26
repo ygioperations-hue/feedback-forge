@@ -1,0 +1,424 @@
+1️⃣ SYSTEM OVERVIEW
+
+FeedbackForge becomes a multi-tenant SaaS with two roles:
+
+👤 Customer (Workspace Owner)
+
+Manages their own projects
+
+Installs widget
+
+Views feedback
+
+Uses AI insights
+
+Manages billing
+
+Redeems LTD (if applicable)
+
+They cannot see other customers or system data.
+
+🛠 Platform Admin (You)
+
+Manages all users
+
+Generates LTD codes
+
+Views global metrics
+
+Can suspend accounts
+
+Can manually upgrade users
+
+Can view any customer project (read-only or support mode)
+
+Only you have this access.
+
+2️⃣ DATABASE STRUCTURE
+
+You already have users table. Modify it as follows:
+
+users
+id (uuid)
+email (unique)
+password_hash
+name
+role ENUM('customer','platform_admin')
+plan_type ENUM('none','monthly','yearly','lifetime')
+stripe_customer_id
+created_at
+
+Default on signup:
+
+role = 'customer'
+plan_type = 'none'
+
+Your account:
+
+role = 'platform_admin'
+ltd_codes (Platform-Level Only)
+id
+code (unique)
+is_used boolean
+used_by_user_id (nullable FK → users.id)
+created_at
+
+Only platform_admin interacts with this table except redemption endpoint.
+
+projects
+
+Already correctly scoped:
+
+user_id → users.id
+
+This ensures isolation.
+
+3️⃣ ACCESS CONTROL MATRIX
+
+This is critical.
+
+CUSTOMER PERMISSIONS
+
+Can:
+
+Create projects
+
+Edit/delete own projects
+
+Install widget
+
+View own feedback
+
+Use AI summary
+
+Subscribe via Stripe
+
+Redeem LTD code
+
+Cannot:
+
+View other users
+
+Generate LTD codes
+
+View LTD usage
+
+See global stats
+
+Access /admin routes
+
+PLATFORM ADMIN PERMISSIONS
+
+Can:
+
+View all users
+
+View all projects (read-only)
+
+Generate LTD codes
+
+View LTD usage
+
+Manually change user plan
+
+Suspend user
+
+Access admin dashboard
+
+Cannot:
+
+Access Stripe billing page as a customer
+
+Create normal customer projects (optional restriction)
+
+4️⃣ ROUTE STRUCTURE
+CUSTOMER ROUTES
+/dashboard
+/projects
+/projects/:id
+/billing
+/roadmap/:slug (public)
+/changelog/:slug (public)
+
+All protected by:
+
+if (!user || user.role !== 'customer') deny();
+
+(Platform admin may optionally access via support mode.)
+
+PLATFORM ADMIN ROUTES
+/admin
+/admin/users
+/admin/ltd
+/admin/analytics
+
+Protected by:
+
+if (!user || user.role !== 'platform_admin') {
+   return 403;
+}
+
+Never rely only on frontend hiding.
+
+5️⃣ SIDEBAR STRUCTURE
+Customer Sidebar
+
+Dashboard
+
+Projects
+
+Responses
+
+Billing
+
+Settings
+
+Platform Admin Sidebar
+
+Admin Dashboard
+
+Users
+
+LTD Codes
+
+Global Analytics
+
+(Optional) System Logs
+
+Do NOT mix these menus.
+
+6️⃣ LTD SYSTEM (Platform Model)
+Platform Admin Flow
+
+Go to /admin/ltd
+
+Click “Generate Code”
+
+Code stored in ltd_codes
+
+Share code externally (email, AppSumo, etc.)
+
+Customer Flow
+
+Sign up → plan_type = none
+
+Sees paywall
+
+Goes to Pricing
+
+Enters LTD code
+
+Backend validates
+
+If valid:
+
+plan_type = lifetime
+
+ltd_code.is_used = true
+
+ltd_code.used_by_user_id = user.id
+
+Paywall lifted permanently.
+
+7️⃣ STRIPE INTEGRATION (Multi-Tenant Correct)
+
+Only customers use Stripe.
+
+Platform admin does NOT subscribe.
+
+Flow:
+
+Customer clicks Subscribe
+
+Stripe Checkout session created
+
+Webhook updates:
+
+plan_type = monthly OR yearly
+stripe_customer_id saved
+
+On subscription cancellation:
+
+plan_type = none
+
+Unless:
+
+plan_type = lifetime
+
+Never override lifetime.
+
+8️⃣ DATA ISOLATION RULES
+
+Every project query must include:
+
+WHERE user_id = current_user_id
+
+Never allow:
+
+SELECT * FROM projects;
+
+Unless role = platform_admin.
+
+Even then:
+Prefer read-only mode.
+
+9️⃣ ADMIN DASHBOARD STRUCTURE
+/admin Overview
+
+Display:
+
+Total Users
+
+Active Subscriptions
+
+Lifetime Users
+
+Total Projects
+
+Total Feedback Count
+
+MRR (if Stripe active)
+
+/admin/users
+
+Table:
+
+Email
+
+Role
+
+Plan Type
+
+Projects Count
+
+Joined Date
+
+Actions:
+
+View Projects
+
+Change Plan
+
+Suspend
+
+Delete
+
+/admin/ltd
+
+Display:
+
+Total codes
+
+Used codes
+
+Unused codes
+
+Code table:
+
+Code
+
+Used?
+
+Used by
+
+Date used
+
+Actions:
+
+Generate new code
+
+Delete unused code
+
+🔟 PAYWALL LOGIC (Updated)
+
+New logic:
+
+if (user.role === 'platform_admin') allow();
+
+if (user.plan_type === 'none') {
+   block();
+}
+
+Platform admin bypasses paywall.
+
+1️⃣1️⃣ SECURITY REQUIREMENTS
+
+You must implement:
+
+Role-based middleware
+
+Server-side validation for all admin routes
+
+Never expose global queries to customers
+
+Rate limit admin endpoints
+
+Log all admin actions
+
+1️⃣2️⃣ FUTURE SCALABILITY (Optional)
+
+Later you can add:
+
+Team members per workspace
+
+Owner + member roles
+
+Project-level permissions
+
+Audit logs
+
+Impersonation mode (admin can view as customer)
+
+But not required now.
+
+1️⃣3️⃣ IMPLEMENTATION STEPS (ORDER)
+
+Step 1
+Add role column to users table.
+
+Step 2
+Mark your account as platform_admin.
+
+Step 3
+Create admin route group.
+
+Step 4
+Move LTD generation UI into /admin/ltd.
+
+Step 5
+Hide LTD from customer sidebar.
+
+Step 6
+Add middleware for role checks.
+
+Step 7
+Test:
+
+Customer cannot access /admin
+
+Admin can access everything
+
+Projects are isolated per user
+
+Step 8
+Deploy.
+
+1️⃣4️⃣ FINAL ARCHITECTURE SUMMARY
+
+You now have:
+
+Platform
+└── Admin (you)
+├── Manage Users
+├── Manage LTD
+├── View Global Metrics
+
+Customers
+└── Individual Workspace
+├── Projects
+├── Feedback
+├── Roadmap
+├── AI Insights
+├── Billing
+
+Clean. Scalable. Professional SaaS structure.
