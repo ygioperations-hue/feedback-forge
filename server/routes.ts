@@ -774,6 +774,10 @@ export async function registerRoutes(
 
   app.post("/api/billing/checkout", requireAuth, async (req, res) => {
     try {
+      if (req.user!.role === "platform_admin") {
+        return res.status(403).json({ message: "Platform admins do not need a subscription" });
+      }
+
       const schema = z.object({ plan: z.enum(["monthly", "yearly"]) });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -998,26 +1002,6 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ltd/codes", requireAuth, async (req, res) => {
-    try {
-      const uid = req.session.userId!;
-      const codes = await storage.getLtdCodes(uid);
-      res.json(codes);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to fetch LTD codes" });
-    }
-  });
-
-  app.post("/api/ltd/generate", requireAuth, ltdGenerateLimiter, async (req, res) => {
-    try {
-      const uid = req.session.userId!;
-      const code = await storage.generateLtdCode(uid);
-      res.status(201).json(code);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to generate code" });
-    }
-  });
-
   app.post("/api/ltd/redeem", requireAuth, ltdRedeemLimiter, async (req, res) => {
     try {
       const schema = z.object({ code: z.string().min(1) });
@@ -1031,6 +1015,107 @@ export async function registerRoutes(
       res.json(redeemed);
     } catch (err) {
       res.status(500).json({ message: "Failed to redeem code" });
+    }
+  });
+
+  const adminLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many requests. Please try again later." },
+  });
+
+  app.get("/api/admin/stats", requireAuth, requirePlatformAdmin, adminLimiter, async (_req, res) => {
+    try {
+      const stats = await storage.getAdminStats();
+      res.json(stats);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch admin stats" });
+    }
+  });
+
+  app.get("/api/admin/users", requireAuth, requirePlatformAdmin, adminLimiter, async (_req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const usersWithCounts = await Promise.all(allUsers.map(async (u) => {
+        const projectCount = await storage.getProjectCount(u.id);
+        return {
+          id: u.id,
+          email: u.email,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          role: u.role,
+          planType: u.planType,
+          projectCount,
+          createdAt: u.createdAt,
+        };
+      }));
+      res.json(usersWithCounts);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/plan", requireAuth, requirePlatformAdmin, adminLimiter, async (req, res) => {
+    try {
+      const schema = z.object({ planType: z.enum(["none", "monthly", "yearly", "lifetime"]) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid plan type" });
+
+      const targetUser = await storage.getUserById(p(req.params.id));
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      const updated = await storage.updateUserPlanType(targetUser.id, parsed.data.planType);
+      res.json({ id: updated.id, email: updated.email, planType: updated.planType });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update user plan" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", requireAuth, requirePlatformAdmin, adminLimiter, async (req, res) => {
+    try {
+      const targetId = p(req.params.id);
+      if (targetId === req.session.userId) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+
+      const targetUser = await storage.getUserById(targetId);
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      await storage.deleteUser(targetId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  app.get("/api/admin/ltd/codes", requireAuth, requirePlatformAdmin, adminLimiter, async (_req, res) => {
+    try {
+      const codes = await storage.getAllLtdCodes();
+      res.json(codes);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch LTD codes" });
+    }
+  });
+
+  app.post("/api/admin/ltd/generate", requireAuth, requirePlatformAdmin, ltdGenerateLimiter, async (req, res) => {
+    try {
+      const uid = req.session.userId!;
+      const code = await storage.generateLtdCode(uid);
+      res.status(201).json(code);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to generate code" });
+    }
+  });
+
+  app.delete("/api/admin/ltd/codes/:id", requireAuth, requirePlatformAdmin, adminLimiter, async (req, res) => {
+    try {
+      const deleted = await storage.deleteLtdCode(p(req.params.id));
+      if (!deleted) return res.status(400).json({ message: "Cannot delete: code not found or already redeemed" });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete LTD code" });
     }
   });
 

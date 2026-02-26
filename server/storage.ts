@@ -90,6 +90,19 @@ export interface IStorage {
   getResponseCountByProject(projectId: string): Promise<number>;
   getProjectCount(userId: string): Promise<number>;
   upgradeAllProjectsToLifetime(userId: string): Promise<void>;
+
+  getAllUsers(): Promise<User[]>;
+  deleteUser(id: string): Promise<void>;
+  getAllLtdCodes(): Promise<(LtdCode & { redeemerEmail?: string | null })[]>;
+  deleteLtdCode(id: string): Promise<boolean>;
+  getAdminStats(): Promise<{
+    totalUsers: number;
+    activeSubscriptions: number;
+    lifetimeUsers: number;
+    totalProjects: number;
+    totalFeedback: number;
+    mrr: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -417,6 +430,91 @@ export class DatabaseStorage implements IStorage {
 
   async upgradeAllProjectsToLifetime(userId: string): Promise<void> {
     await db.update(projects).set({ plan: "lifetime" }).where(eq(projects.userId, userId));
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(users.createdAt);
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    const userProjects = await db.select({ id: projects.id }).from(projects).where(eq(projects.userId, id));
+    const projectIds = userProjects.map(p => p.id);
+
+    if (projectIds.length > 0) {
+      const projectResponses = await db.select({ id: responses.id }).from(responses).where(inArray(responses.projectId, projectIds));
+      const responseIds = projectResponses.map(r => r.id);
+
+      if (responseIds.length > 0) {
+        await db.delete(answers).where(inArray(answers.responseId, responseIds));
+        await db.delete(responses).where(inArray(responses.id, responseIds));
+      }
+
+      await db.delete(roadmapItems).where(inArray(roadmapItems.projectId, projectIds));
+      await db.delete(changelogItems).where(inArray(changelogItems.projectId, projectIds));
+      await db.delete(questions).where(inArray(questions.projectId, projectIds));
+      await db.delete(projects).where(eq(projects.userId, id));
+    }
+
+    await db.delete(subscriptions).where(eq(subscriptions.userId, id));
+    await db.delete(ltdCodes).where(eq(ltdCodes.userId, id));
+    await db.delete(users).where(eq(users.id, id));
+  }
+
+  async getAllLtdCodes(): Promise<(LtdCode & { redeemerEmail?: string | null })[]> {
+    const allCodes = await db.select().from(ltdCodes).orderBy(ltdCodes.createdAt);
+    const result: (LtdCode & { redeemerEmail?: string | null })[] = [];
+    for (const code of allCodes) {
+      let redeemerEmail: string | null = null;
+      if (code.isRedeemed && code.userId) {
+        const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, code.userId));
+        redeemerEmail = user?.email || null;
+      }
+      result.push({ ...code, redeemerEmail });
+    }
+    return result;
+  }
+
+  async deleteLtdCode(id: string): Promise<boolean> {
+    const [code] = await db.select().from(ltdCodes).where(eq(ltdCodes.id, id));
+    if (!code || code.isRedeemed) return false;
+    await db.delete(ltdCodes).where(eq(ltdCodes.id, id));
+    return true;
+  }
+
+  async getAdminStats(): Promise<{
+    totalUsers: number;
+    activeSubscriptions: number;
+    lifetimeUsers: number;
+    totalProjects: number;
+    totalFeedback: number;
+    mrr: number;
+  }> {
+    const allUsers = await db.select().from(users);
+    const totalUsers = allUsers.length;
+    const lifetimeUsers = allUsers.filter(u => u.planType === 'lifetime').length;
+
+    const activeSubs = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
+    const activeSubscriptions = activeSubs.length;
+
+    const allProjects = await db.select().from(projects);
+    const totalProjects = allProjects.length;
+
+    const allResponses = await db.select().from(responses);
+    const totalFeedback = allResponses.length;
+
+    let mrr = 0;
+    for (const sub of activeSubs) {
+      const [plan] = await db.select().from(plans).where(eq(plans.id, sub.planId));
+      if (plan) {
+        if (plan.interval === 'month') {
+          mrr += plan.price;
+        } else if (plan.interval === 'year') {
+          mrr += Math.round(plan.price / 12);
+        }
+      }
+    }
+
+    return { totalUsers, activeSubscriptions, lifetimeUsers, totalProjects, totalFeedback, mrr };
   }
 }
 
