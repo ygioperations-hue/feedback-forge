@@ -83,12 +83,20 @@ export interface IStorage {
   upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
   getChangelogByProject(projectId: string): Promise<ChangelogItem[]>;
   createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem>;
-  generateLtdCode(userId: string): Promise<LtdCode>;
+  generateLtdCode(userId: string | null): Promise<LtdCode>;
   getLtdCodes(userId: string): Promise<LtdCode[]>;
+  getAllLtdCodes(): Promise<LtdCode[]>;
+  deleteLtdCode(id: string): Promise<void>;
   redeemLtdCode(code: string, userId: string): Promise<LtdCode | null>;
   getResponseCountByProject(projectId: string): Promise<number>;
   getProjectCount(userId: string): Promise<number>;
   upgradeAllProjectsToLifetime(userId: string): Promise<void>;
+
+  getAllUsers(): Promise<User[]>;
+  getAllProjects(): Promise<Project[]>;
+  getAllResponses(): Promise<FeedbackResponse[]>;
+  getAllSubscriptions(): Promise<Subscription[]>;
+  updateUserRole(userId: string, role: string): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -382,9 +390,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async generateLtdCode(userId: string): Promise<LtdCode> {
+  async generateLtdCode(userId: string | null): Promise<LtdCode> {
     const code = "FF-" + Array.from({ length: 3 }, () => Math.random().toString(36).substring(2, 6).toUpperCase()).join("-");
-    const [created] = await db.insert(ltdCodes).values({ code, userId }).returning();
+    const values: any = { code };
+    if (userId) values.userId = userId;
+    const [created] = await db.insert(ltdCodes).values(values).returning();
     return created;
   }
 
@@ -411,6 +421,35 @@ export class DatabaseStorage implements IStorage {
 
   async upgradeAllProjectsToLifetime(userId: string): Promise<void> {
     await db.update(projects).set({ plan: "lifetime" }).where(eq(projects.userId, userId));
+  }
+
+  async getAllLtdCodes(): Promise<LtdCode[]> {
+    return db.select().from(ltdCodes).orderBy(ltdCodes.createdAt);
+  }
+
+  async deleteLtdCode(id: string): Promise<void> {
+    await db.delete(ltdCodes).where(eq(ltdCodes.id, id));
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(users.createdAt);
+  }
+
+  async getAllProjects(): Promise<Project[]> {
+    return db.select().from(projects).orderBy(projects.createdAt);
+  }
+
+  async getAllResponses(): Promise<FeedbackResponse[]> {
+    return db.select().from(responses).orderBy(responses.submittedAt);
+  }
+
+  async getAllSubscriptions(): Promise<Subscription[]> {
+    return db.select().from(subscriptions);
+  }
+
+  async updateUserRole(userId: string, role: string): Promise<User> {
+    const [updated] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
+    return updated;
   }
 }
 

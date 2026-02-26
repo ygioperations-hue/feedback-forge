@@ -14,6 +14,7 @@ const sessionPool = new pg.Pool({
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    userRole: string;
   }
 }
 
@@ -37,6 +38,16 @@ export const sessionMiddleware = session({
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     return res.status(401).json({ message: "Not authenticated" });
+  }
+  next();
+}
+
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  if (req.session.userRole !== "platform_admin") {
+    return res.status(403).json({ message: "Forbidden" });
   }
   next();
 }

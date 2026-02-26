@@ -8,6 +8,7 @@ type AuthUser = {
   email: string;
   firstName: string;
   lastName: string;
+  role: string;
 };
 
 type AuthData = {
@@ -18,6 +19,7 @@ type AuthContextType = {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   logout: () => void;
   isLoggingOut: boolean;
 };
@@ -50,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: authData?.user ?? null,
         isLoading,
         isAuthenticated: !!authData?.user,
+        isAdmin: authData?.user?.role === "platform_admin",
         logout: () => logoutMutation.mutate(),
         isLoggingOut: logoutMutation.isPending,
       }}
@@ -78,6 +81,28 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated) {
     return <Redirect to="/login" />;
+  }
+
+  return <>{children}</>;
+}
+
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isAdmin, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect to="/login" />;
+  }
+
+  if (!isAdmin) {
+    return <Redirect to="/dashboard" />;
   }
 
   return <>{children}</>;

@@ -1,4 +1,4 @@
-import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User, CreditCard } from "lucide-react";
+import { LayoutDashboard, FolderPlus, MessageSquareText, LogOut, User, CreditCard, Shield } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
@@ -20,12 +20,11 @@ const navItems = [
   { title: "Projects", url: "/projects", icon: FolderPlus },
   { title: "Responses", url: "/responses", icon: MessageSquareText },
   { title: "Billing", url: "/billing", icon: CreditCard },
-  { title: "LTD Codes", url: "/ltd-admin", icon: Crown },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, logout, isLoggingOut } = useAuth();
+  const { user, isAdmin, logout, isLoggingOut } = useAuth();
 
   return (
     <Sidebar data-testid="sidebar-nav">
@@ -57,6 +56,22 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/admin" data-testid="link-nav-admin">
+                      <Shield className="w-4 h-4" />
+                      <span>Admin Panel</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="p-3 border-t space-y-2">
         {user && (
