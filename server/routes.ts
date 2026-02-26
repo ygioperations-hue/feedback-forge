@@ -5,7 +5,7 @@ import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRo
 import { z } from "zod";
 import OpenAI from "openai";
 import rateLimit from "express-rate-limit";
-import { requireAuth, requireAdmin, hashPassword, verifyPassword } from "./auth";
+import { requireAuth, hashPassword, verifyPassword } from "./auth";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function p(val: string | string[]): string {
@@ -137,11 +137,6 @@ const loginSchema = z.object({
 });
 
 async function isUserActivated(userId: string): Promise<{ activated: boolean; plan: string }> {
-  const user = await storage.getUserById(userId);
-  if (user?.role === "platform_admin") {
-    return { activated: true, plan: "platform_admin" };
-  }
-
   const userLtdCodes = await storage.getLtdCodes(userId);
   const hasRedeemedCode = userLtdCodes.some(c => c.isRedeemed);
   if (hasRedeemedCode) {
@@ -191,7 +186,6 @@ export async function registerRoutes(
       });
 
       req.session.userId = user.id;
-      req.session.userRole = user.role;
 
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -199,7 +193,7 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to create account" });
         }
         res.status(201).json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
         });
       });
     } catch (err: any) {
@@ -230,7 +224,6 @@ export async function registerRoutes(
       }
 
       req.session.userId = user.id;
-      req.session.userRole = user.role;
 
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -238,7 +231,7 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to log in" });
         }
         res.json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
         });
       });
     } catch (err) {
@@ -268,7 +261,7 @@ export async function registerRoutes(
     }
 
     res.json({
-      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
     });
   });
 
@@ -1010,6 +1003,26 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/ltd/codes", requireAuth, async (req, res) => {
+    try {
+      const uid = req.session.userId!;
+      const codes = await storage.getLtdCodes(uid);
+      res.json(codes);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch LTD codes" });
+    }
+  });
+
+  app.post("/api/ltd/generate", requireAuth, ltdGenerateLimiter, async (req, res) => {
+    try {
+      const uid = req.session.userId!;
+      const code = await storage.generateLtdCode(uid);
+      res.status(201).json(code);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to generate code" });
+    }
+  });
+
   app.post("/api/ltd/redeem", requireAuth, ltdRedeemLimiter, async (req, res) => {
     try {
       const schema = z.object({ code: z.string().min(1) });
@@ -1052,170 +1065,6 @@ export async function registerRoutes(
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch limits" });
-    }
-  });
-
-  const adminLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { message: "Too many requests. Please try again later." },
-  });
-
-  app.get("/api/admin/stats", requireAdmin, adminLimiter, async (_req, res) => {
-    try {
-      const allUsers = await storage.getAllUsers();
-      const allProjectsList = await storage.getAllProjects();
-      const allResponsesList = await storage.getAllResponses();
-      const allSubs = await storage.getAllSubscriptions();
-      const allCodes = await storage.getAllLtdCodes();
-
-      const activeSubscriptions = allSubs.filter(s => s.status === "active" || s.status === "trialing").length;
-      const lifetimeUsers = allCodes.filter(c => c.isRedeemed).length;
-
-      const activePlans = await storage.getPlans();
-      let mrr = 0;
-      for (const sub of allSubs) {
-        if (sub.status === "active" || sub.status === "trialing") {
-          const plan = activePlans.find(p => p.id === sub.planId);
-          if (plan) {
-            mrr += plan.interval === "year" ? Math.round(plan.price / 12) : plan.price;
-          }
-        }
-      }
-
-      res.json({
-        totalUsers: allUsers.filter(u => u.role !== "platform_admin").length,
-        activeSubscriptions,
-        lifetimeUsers,
-        totalProjects: allProjectsList.length,
-        totalResponses: allResponsesList.length,
-        mrr,
-      });
-    } catch (err) {
-      console.error("Admin stats error:", err);
-      res.status(500).json({ message: "Failed to fetch stats" });
-    }
-  });
-
-  app.get("/api/admin/users", requireAdmin, adminLimiter, async (_req, res) => {
-    try {
-      const allUsers = await storage.getAllUsers();
-      const allProjectsList = await storage.getAllProjects();
-      const allSubs = await storage.getAllSubscriptions();
-      const allCodes = await storage.getAllLtdCodes();
-
-      const result = allUsers.map(u => {
-        const userProjects = allProjectsList.filter(pr => pr.userId === u.id);
-        const userSub = allSubs.find(s => s.userId === u.id && (s.status === "active" || s.status === "trialing"));
-        const hasLtd = allCodes.some(c => c.userId === u.id && c.isRedeemed);
-
-        let planType = "none";
-        if (u.role === "platform_admin") planType = "platform_admin";
-        else if (hasLtd) planType = "lifetime";
-        else if (userSub) planType = "active";
-
-        return {
-          id: u.id,
-          email: u.email,
-          firstName: u.firstName,
-          lastName: u.lastName,
-          role: u.role,
-          planType,
-          projectCount: userProjects.length,
-          createdAt: u.createdAt,
-        };
-      });
-
-      res.json(result);
-    } catch (err) {
-      console.error("Admin users error:", err);
-      res.status(500).json({ message: "Failed to fetch users" });
-    }
-  });
-
-  app.patch("/api/admin/users/:id/role", requireAdmin, adminLimiter, async (req, res) => {
-    try {
-      const schema = z.object({ role: z.enum(["customer", "platform_admin"]) });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Invalid role" });
-
-      const updated = await storage.updateUserRole(p(req.params.id), parsed.data.role);
-      res.json({ id: updated.id, email: updated.email, role: updated.role });
-    } catch (err) {
-      console.error("Update user role error:", err);
-      res.status(500).json({ message: "Failed to update user role" });
-    }
-  });
-
-  app.patch("/api/admin/users/:id/plan", requireAdmin, adminLimiter, async (req, res) => {
-    try {
-      const schema = z.object({ planType: z.enum(["lifetime", "none"]) });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Invalid plan type" });
-
-      const userId = p(req.params.id);
-      if (parsed.data.planType === "lifetime") {
-        const existingCodes = await storage.getLtdCodes(userId);
-        const hasRedeemed = existingCodes.some(c => c.isRedeemed);
-        if (!hasRedeemed) {
-          const code = await storage.generateLtdCode(userId);
-          await storage.redeemLtdCode(code.code, userId);
-        }
-        await storage.upgradeAllProjectsToLifetime(userId);
-      }
-
-      res.json({ message: "Plan updated" });
-    } catch (err) {
-      console.error("Update user plan error:", err);
-      res.status(500).json({ message: "Failed to update user plan" });
-    }
-  });
-
-  app.get("/api/admin/ltd", requireAdmin, adminLimiter, async (_req, res) => {
-    try {
-      const codes = await storage.getAllLtdCodes();
-      const totalCodes = codes.length;
-      const usedCodes = codes.filter(c => c.isRedeemed).length;
-      const unusedCodes = totalCodes - usedCodes;
-
-      const allUsers = await storage.getAllUsers();
-      const enrichedCodes = codes.map(c => {
-        const user = c.userId ? allUsers.find(u => u.id === c.userId) : null;
-        return {
-          ...c,
-          userEmail: user?.email || null,
-        };
-      });
-
-      res.json({ totalCodes, usedCodes, unusedCodes, codes: enrichedCodes });
-    } catch (err) {
-      console.error("Admin LTD error:", err);
-      res.status(500).json({ message: "Failed to fetch LTD codes" });
-    }
-  });
-
-  app.post("/api/admin/ltd/generate", requireAdmin, ltdGenerateLimiter, async (_req, res) => {
-    try {
-      const code = await storage.generateLtdCode(null);
-      res.status(201).json(code);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to generate code" });
-    }
-  });
-
-  app.delete("/api/admin/ltd/:id", requireAdmin, adminLimiter, async (req, res) => {
-    try {
-      const codeId = p(req.params.id);
-      const allCodes = await storage.getAllLtdCodes();
-      const code = allCodes.find(c => c.id === codeId);
-      if (!code) return res.status(404).json({ message: "Code not found" });
-      if (code.isRedeemed) return res.status(400).json({ message: "Cannot delete a redeemed code" });
-      await storage.deleteLtdCode(codeId);
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(500).json({ message: "Failed to delete code" });
     }
   });
 

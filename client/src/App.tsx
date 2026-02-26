@@ -7,8 +7,7 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { AdminSidebar } from "@/components/admin-sidebar";
-import { AuthProvider, RequireAuth, RequireAdmin } from "@/lib/auth";
+import { AuthProvider, RequireAuth } from "@/lib/auth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
@@ -21,14 +20,12 @@ import ResponseDetail from "@/pages/response-detail";
 import PublicRoadmap from "@/pages/public-roadmap";
 import PublicChangelog from "@/pages/public-changelog";
 import Pricing from "@/pages/pricing";
+import LtdAdmin from "@/pages/ltd-admin";
 import Profile from "@/pages/profile";
 import Billing from "@/pages/billing";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
-import AdminDashboard from "@/pages/admin-dashboard";
-import AdminUsers from "@/pages/admin-users";
-import AdminLtd from "@/pages/admin-ltd";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const style = {
@@ -56,32 +53,6 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AdminLayout({ children }: { children: React.ReactNode }) {
-  const style = {
-    "--sidebar-width": "16rem",
-    "--sidebar-width-icon": "3rem",
-  };
-
-  return (
-    <RequireAdmin>
-      <SidebarProvider style={style as React.CSSProperties}>
-        <div className="flex h-screen w-full">
-          <AdminSidebar />
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <header className="flex items-center justify-between gap-2 p-2 border-b shrink-0 sticky top-0 z-50 bg-background">
-              <SidebarTrigger data-testid="button-admin-sidebar-toggle" />
-              <ThemeToggle />
-            </header>
-            <main className="flex-1 overflow-auto">
-              {children}
-            </main>
-          </div>
-        </div>
-      </SidebarProvider>
-    </RequireAdmin>
-  );
-}
-
 function Router() {
   return (
     <Switch>
@@ -93,15 +64,6 @@ function Router() {
       <Route path="/roadmap/:slug" component={PublicRoadmap} />
       <Route path="/changelog/:slug" component={PublicChangelog} />
       <Route path="/pricing" component={Pricing} />
-      <Route path="/admin">
-        <AdminLayout><AdminDashboard /></AdminLayout>
-      </Route>
-      <Route path="/admin/users">
-        <AdminLayout><AdminUsers /></AdminLayout>
-      </Route>
-      <Route path="/admin/ltd">
-        <AdminLayout><AdminLtd /></AdminLayout>
-      </Route>
       <Route path="/dashboard">
         <AppLayout><Dashboard /></AppLayout>
       </Route>
@@ -119,6 +81,9 @@ function Router() {
       </Route>
       <Route path="/responses/:id">
         <AppLayout><ResponseDetail /></AppLayout>
+      </Route>
+      <Route path="/ltd-admin">
+        <AppLayout><LtdAdmin /></AppLayout>
       </Route>
       <Route path="/profile">
         <AppLayout><Profile /></AppLayout>
