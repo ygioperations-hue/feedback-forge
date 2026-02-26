@@ -6,7 +6,16 @@ import { sessionMiddleware } from "./auth";
 import { WebhookHandlers } from "./webhookHandlers";
 import { ensureStripePrices } from "./stripe-setup";
 
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
+
 const app = express();
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {
