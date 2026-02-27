@@ -29,27 +29,21 @@ export class WebhookHandlers {
 
     let event: any;
 
-    if (webhookSecret) {
-      try {
-        event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-      } catch (err: any) {
-        console.error('Webhook signature verification failed:', err.message);
-        throw new Error(`Webhook signature verification failed: ${err.message}`);
-      }
-    } else {
-      console.warn('STRIPE_WEBHOOK_SECRET not set — skipping signature verification. Set this secret for production security.');
-      try {
-        event = JSON.parse(payload.toString());
-      } catch (parseErr: any) {
-        console.error('Failed to parse webhook payload:', parseErr.message);
-        throw parseErr;
-      }
+    if (!webhookSecret) {
+      throw new Error('STRIPE_WEBHOOK_SECRET is not configured. Webhooks cannot be processed without signature verification.');
+    }
+
+    try {
+      event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    } catch (err: any) {
+      console.error('Webhook signature verification failed:', err.message);
+      throw new Error(`Webhook signature verification failed: ${err.message}`);
     }
 
     const eventType = event.type;
     const data = event.data?.object;
 
-    console.log(`Stripe webhook received: ${eventType}`);
+    console.log(`Stripe webhook: ${eventType}`);
 
     if (!data) {
       console.log('Webhook: No data object in event');
@@ -78,7 +72,7 @@ export class WebhookHandlers {
     const stripeSubscriptionId = data.subscription;
     const metadata = data.metadata || {};
 
-    console.log(`Checkout completed: customer=${customerId}, subscription=${stripeSubscriptionId}, metadata=${JSON.stringify(metadata)}`);
+    console.log(`Checkout completed: customer=${customerId}, subscription=${stripeSubscriptionId}`);
 
     if (!customerId || !stripeSubscriptionId) {
       console.log('Checkout: Missing customer or subscription ID');
@@ -118,7 +112,7 @@ export class WebhookHandlers {
         || parseStripeDate(itemData?.current_period_end);
       if (parsedStart) periodStart = parsedStart;
       if (parsedEnd) periodEnd = parsedEnd;
-      console.log(`Stripe subscription retrieved: start=${periodStart.toISOString()}, end=${periodEnd.toISOString()}`);
+      
     } catch (err: any) {
       console.error('Failed to retrieve subscription from Stripe:', err.message);
     }
@@ -138,11 +132,8 @@ export class WebhookHandlers {
       if (plan) {
         const newPlanType = plan.interval === 'year' ? 'yearly' : 'monthly';
         await storage.updateUserPlanType(user.id, newPlanType);
-        console.log(`Updated user ${user.id} planType to ${newPlanType}`);
       }
     }
-
-    console.log(`Created subscription for user ${user.id}: ${stripeSubscriptionId}`);
   }
 
   static async handleSubscriptionUpdated(data: any): Promise<void> {
@@ -151,7 +142,7 @@ export class WebhookHandlers {
     const cancelAtPeriodEnd = data.cancel_at_period_end ?? false;
     const customerId = data.customer;
 
-    console.log(`Subscription updated: id=${stripeSubId}, status=${status}, customer=${customerId}`);
+    
 
     const existing = await storage.getSubscriptionByStripeId(stripeSubId);
     if (!existing) {
@@ -194,10 +185,7 @@ export class WebhookHandlers {
             if (user.planType !== 'lifetime') {
               const newPlanType = matchedPlan.interval === 'year' ? 'yearly' : 'monthly';
               await storage.updateUserPlanType(user.id, newPlanType);
-              console.log(`Updated user ${user.id} planType to ${newPlanType}`);
             }
-
-            console.log(`Created subscription from update event for user ${user.id}: ${stripeSubId}`);
           }
         }
       }
@@ -224,7 +212,6 @@ export class WebhookHandlers {
       const matchedPlan = plans.find(p => p.stripePriceId === priceId);
       if (matchedPlan && matchedPlan.id !== existing.planId) {
         updateData.planId = matchedPlan.id;
-        console.log(`Subscription ${stripeSubId}: plan changed to ${matchedPlan.name} (${matchedPlan.id})`);
       }
     }
 
@@ -238,12 +225,9 @@ export class WebhookHandlers {
         if (newPlan) {
           const newPlanType = newPlan.interval === 'year' ? 'yearly' : 'monthly';
           await storage.updateUserPlanType(user.id, newPlanType);
-          console.log(`Updated user ${user.id} planType to ${newPlanType} on plan switch`);
         }
       }
     }
-
-    console.log(`Updated subscription ${stripeSubId}: status=${status}, cancelAtPeriodEnd=${cancelAtPeriodEnd}`);
   }
 
   static async handleSubscriptionDeleted(data: any): Promise<void> {
@@ -265,10 +249,7 @@ export class WebhookHandlers {
       const user = await storage.getUserByStripeCustomerId(customerId);
       if (user && user.planType !== 'lifetime') {
         await storage.updateUserPlanType(user.id, 'none');
-        console.log(`Set user ${user.id} planType to none after subscription deletion`);
       }
     }
-
-    console.log(`Canceled subscription ${stripeSubId}`);
   }
 }

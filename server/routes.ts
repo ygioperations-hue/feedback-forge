@@ -260,59 +260,6 @@ export async function registerRoutes(
     });
   });
 
-  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
-    try {
-      const schema = z.object({ email: z.string().email() });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Please provide a valid email address" });
-      }
-
-      const user = await storage.getUserByEmail(parsed.data.email.toLowerCase().trim());
-      if (!user) {
-        return res.json({ message: "If an account with that email exists, a reset code has been generated.", hasCode: false });
-      }
-
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      const expiry = new Date(Date.now() + 10 * 60 * 1000);
-      await storage.setResetToken(user.id, code, expiry);
-
-      res.json({ message: "Your reset code is ready.", hasCode: true, code });
-    } catch (err) {
-      console.error("Forgot password error:", err);
-      res.status(500).json({ message: "Failed to process request" });
-    }
-  });
-
-  app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
-    try {
-      const schema = z.object({
-        email: z.string().email(),
-        code: z.string().length(6),
-        password: z.string().min(8).max(128),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
-      }
-
-      const { email, code, password } = parsed.data;
-      const user = await storage.getUserByEmail(email.toLowerCase().trim());
-
-      if (!user || user.resetToken !== code || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
-        return res.status(400).json({ message: "Invalid or expired reset code. Please request a new one." });
-      }
-
-      const hashedPassword = await hashPassword(password);
-      await storage.updateUserPassword(user.id, hashedPassword);
-      await storage.clearResetToken(user.id);
-
-      res.json({ message: "Password has been reset successfully. You can now sign in." });
-    } catch (err) {
-      console.error("Reset password error:", err);
-      res.status(500).json({ message: "Failed to reset password" });
-    }
-  });
 
   app.patch("/api/auth/profile", requireAuth, async (req, res) => {
     try {

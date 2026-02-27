@@ -11,7 +11,7 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - Session-based auth using express-session + connect-pg-simple (PostgreSQL session store)
 - Signup requires: firstName, lastName, email, password (creates customer role, planType=none)
 - Session stores userId; `requireAuth` middleware loads full user onto `req.user`
-- Password reset via 6-digit security code shown on screen (no email service needed)
+- Forgot password feature removed (no email service dependency); columns remain in schema but routes/pages deleted
 - Public pages (forms, roadmaps, changelogs, widget submissions, upvotes) remain unauthenticated
 - Middleware chain: `requireAuth` (loads user) → `requirePlatformAdmin` (role check) or `requireActivePlan` (plan check)
 - Frontend guards: `RequireAuth` (auth gate), `RequireCustomer` (redirects admin to /admin), `RequireAdmin` (redirects customer to /dashboard)
@@ -19,6 +19,12 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - Test account: test@feedbackforge.app / test1234 (customer, monthly)
 
 ## Recent Changes
+- 2026-02-27: Security hardening: Helmet headers, log sanitization, mandatory Stripe webhook signatures, session secret enforcement
+- 2026-02-27: Removed forgot-password feature entirely (routes, page, login link, storage methods)
+- 2026-02-27: LTD redemption UX: auth cache invalidation + redirect to dashboard after success
+- 2026-02-27: Post-checkout: auth/limits cache invalidation on billing success page
+- 2026-02-27: Error states added to admin dashboard, admin users, public roadmap upvote
+- 2026-02-27: Mobile-friendly admin tables with horizontal scroll
 - 2026-02-26: Added platform admin role with full route/UI separation (T001-T011)
 - 2026-02-26: Added `role` (customer/platform_admin) and `planType` (none/monthly/yearly/lifetime) to users table
 - 2026-02-26: Refactored requireAuth to load full user onto req.user; added requirePlatformAdmin, requireActivePlan middleware
@@ -62,7 +68,7 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - `client/src/pages/admin-dashboard.tsx` - Admin stats overview (/admin)
 - `client/src/pages/admin-users.tsx` - User management with plan change and delete (/admin/users)
 - `client/src/pages/admin-ltd.tsx` - LTD code management (/admin/ltd)
-- `client/src/pages/` - Dashboard, Projects, ProjectNew, ProjectDetail, PublicForm, PublicRoadmap, PublicChangelog, ResponsesList, ResponseDetail, Pricing, Profile, Billing, Login, Signup, ForgotPassword
+- `client/src/pages/` - Dashboard, Projects, ProjectNew, ProjectDetail, PublicForm, PublicRoadmap, PublicChangelog, ResponsesList, ResponseDetail, Pricing, Profile, Billing, Login, Signup
 
 ## Key API Routes
 
@@ -71,9 +77,6 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - POST /api/auth/login - Verify credentials, set session (returns user with role, planType)
 - POST /api/auth/logout - Destroy session
 - GET /api/auth/me - Return current user info (includes role, planType)
-- POST /api/auth/forgot-password - Generate 6-digit reset code
-- POST /api/auth/reset-password - Validate code + email, update password
-
 ### Customer (requireAuth, userId-scoped)
 - PATCH /api/auth/profile - Update user first/last name
 - PATCH /api/auth/password - Change password

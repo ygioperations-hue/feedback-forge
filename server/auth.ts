@@ -3,7 +3,6 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
 import type { User } from "@shared/schema";
 
 const PgSession = connectPgSimple(session);
@@ -33,13 +32,18 @@ export function setUserLookup(fn: UserLookup) {
   _getUserById = fn;
 }
 
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret && process.env.NODE_ENV === "production") {
+  throw new Error("SESSION_SECRET environment variable is required in production");
+}
+
 export const sessionMiddleware = session({
   store: new PgSession({
     pool: sessionPool,
     tableName: "user_sessions",
     createTableIfMissing: true,
   }),
-  secret: process.env.SESSION_SECRET || "feedbackforge-dev-secret",
+  secret: sessionSecret || "feedbackforge-dev-secret",
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -99,6 +103,3 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export function generateResetToken(): string {
-  return crypto.randomBytes(32).toString("hex");
-}

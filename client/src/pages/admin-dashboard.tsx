@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, CreditCard, Crown, FolderPlus, MessageSquareText, DollarSign } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Users, CreditCard, Crown, FolderPlus, MessageSquareText, DollarSign, AlertTriangle } from "lucide-react";
 
 type AdminStats = {
   totalUsers: number;
@@ -13,7 +14,7 @@ type AdminStats = {
 };
 
 export default function AdminDashboard() {
-  const { data: stats, isLoading } = useQuery<AdminStats>({
+  const { data: stats, isLoading, error } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
   });
 
@@ -32,6 +33,13 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-title">Dashboard</h1>
         <p className="text-muted-foreground">Platform overview and key metrics</p>
       </div>
+
+      {error && (
+        <Alert variant="destructive" data-testid="alert-stats-error">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>Failed to load dashboard stats. Please try refreshing the page.</AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {statCards.map((card) => (

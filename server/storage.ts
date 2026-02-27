@@ -48,10 +48,6 @@ export interface IStorage {
   getUserById(id: string): Promise<User | undefined>;
   updateUserPassword(id: string, hashedPassword: string): Promise<void>;
   updateUserProfile(id: string, firstName: string, lastName: string): Promise<User>;
-  setResetToken(userId: string, token: string, expiry: Date): Promise<void>;
-  getUserByResetToken(token: string): Promise<User | undefined>;
-  clearResetToken(userId: string): Promise<void>;
-
   updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<User>;
   updateUserPlanType(userId: string, planType: string): Promise<User>;
   getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | undefined>;
@@ -145,18 +141,6 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async setResetToken(userId: string, token: string, expiry: Date): Promise<void> {
-    await db.update(users).set({ resetToken: token, resetTokenExpiry: expiry }).where(eq(users.id, userId));
-  }
-
-  async getUserByResetToken(token: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.resetToken, token));
-    return user;
-  }
-
-  async clearResetToken(userId: string): Promise<void> {
-    await db.update(users).set({ resetToken: null, resetTokenExpiry: null }).where(eq(users.id, userId));
-  }
 
   async getPlans(): Promise<Plan[]> {
     return db.select().from(plans).orderBy(plans.price);

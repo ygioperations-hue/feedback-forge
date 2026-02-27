@@ -56,6 +56,8 @@ export default function Billing() {
     if (params.get("success") === "true") {
       setShowSuccess(true);
       window.history.replaceState({}, "", "/billing");
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
     }
   }, []);
 

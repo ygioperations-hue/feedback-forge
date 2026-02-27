@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { ChevronUp, Map, MessageSquareText } from "lucide-react";
 import type { RoadmapItem } from "@shared/schema";
 
@@ -25,6 +26,7 @@ type RoadmapData = {
 };
 
 export default function PublicRoadmap() {
+  const { toast } = useToast();
   const [, params] = useRoute("/roadmap/:slug");
   const slug = params?.slug;
 
@@ -40,6 +42,9 @@ export default function PublicRoadmap() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/roadmap", slug] });
+    },
+    onError: () => {
+      toast({ title: "Vote failed", description: "Unable to register your vote. Please try again.", variant: "destructive" });
     },
   });
 

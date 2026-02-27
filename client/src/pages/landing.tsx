@@ -185,6 +185,8 @@ export default function Landing() {
       toast({ title: "Lifetime deal activated!", description: "You now have unlimited access to all features." });
       setLtdCode("");
       queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setTimeout(() => { window.location.href = "/dashboard"; }, 1500);
     },
     onError: (err: Error) => {
       toast({ title: "Invalid code", description: err.message, variant: "destructive" });

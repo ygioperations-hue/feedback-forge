@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Check, MessageSquareText, Shield, Zap, Crown, Users, BarChart3, Code, Star, Lock } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 const plans = [
   {
@@ -61,6 +61,7 @@ type LimitsData = {
 
 export default function Pricing() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [ltdCode, setLtdCode] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
@@ -93,6 +94,8 @@ export default function Pricing() {
       toast({ title: "Lifetime deal activated!", description: "You now have unlimited access to all features." });
       setLtdCode("");
       queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setTimeout(() => setLocation("/dashboard"), 1500);
     },
     onError: (err: Error) => {
       toast({ title: "Invalid code", description: err.message, variant: "destructive" });

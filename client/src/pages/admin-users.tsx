@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Trash2 } from "lucide-react";
+import { Trash2, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -34,7 +35,7 @@ export default function AdminUsers() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
 
-  const { data: users, isLoading } = useQuery<AdminUser[]>({
+  const { data: users, isLoading, error } = useQuery<AdminUser[]>({
     queryKey: ["/api/admin/users"],
   });
 
@@ -73,6 +74,13 @@ export default function AdminUsers() {
         <p className="text-muted-foreground">Manage platform users and their plans</p>
       </div>
 
+      {error && (
+        <Alert variant="destructive" data-testid="alert-users-error">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>Failed to load users. Please try refreshing the page.</AlertDescription>
+        </Alert>
+      )}
+
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -80,7 +88,7 @@ export default function AdminUsers() {
           ))}
         </div>
       ) : (
-        <div className="border rounded-lg">
+        <div className="border rounded-lg overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
