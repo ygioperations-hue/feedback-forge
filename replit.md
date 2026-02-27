@@ -22,7 +22,9 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - 2026-02-27: Security hardening: Helmet headers, log sanitization, mandatory Stripe webhook signatures, session secret enforcement
 - 2026-02-27: Removed forgot-password feature entirely (routes, page, login link, storage methods)
 - 2026-02-27: LTD redemption UX: auth cache invalidation + redirect to dashboard after success
-- 2026-02-27: Post-checkout: auth/limits cache invalidation on billing success page
+- 2026-02-27: Post-checkout: direct checkout verification via Stripe API (no webhook dependency for initial subscription setup)
+- 2026-02-27: Added POST /api/billing/verify-checkout endpoint for direct session verification
+- 2026-02-27: Checkout success URL now includes session_id for direct verification
 - 2026-02-27: Error states added to admin dashboard, admin users, public roadmap upvote
 - 2026-02-27: Mobile-friendly admin tables with horizontal scroll
 - 2026-02-26: Added platform admin role with full route/UI separation (T001-T011)
@@ -94,6 +96,7 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - POST /api/ltd/redeem - Redeem LTD code (sets planType=lifetime)
 - GET /api/limits - Plan usage/limits
 - POST /api/billing/checkout - Stripe checkout (blocked for platform_admin)
+- POST /api/billing/verify-checkout - Direct checkout session verification (creates subscription without webhook)
 - GET /api/billing/status - Subscription status
 - GET /api/billing/history - Payment history
 - POST /api/billing/switch - Switch plans
