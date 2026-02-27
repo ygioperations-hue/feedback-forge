@@ -1,4 +1,4 @@
-import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User, CreditCard, Users, Shield } from "lucide-react";
+import { LayoutDashboard, FolderPlus, MessageSquareText, Crown, LogOut, User, CreditCard, Users } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
@@ -23,7 +23,7 @@ const customerNavItems = [
 ];
 
 const adminNavItems = [
-  { title: "Admin Dashboard", url: "/admin", icon: Shield },
+  { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
   { title: "Users", url: "/admin/users", icon: Users },
   { title: "LTD Codes", url: "/admin/ltd", icon: Crown },
 ];

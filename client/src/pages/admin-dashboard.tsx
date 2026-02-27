@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   return (
     <div className="p-6 space-y-6" data-testid="page-admin-dashboard">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-title">Admin Dashboard</h1>
+        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-title">Dashboard</h1>
         <p className="text-muted-foreground">Platform overview and key metrics</p>
       </div>
 
