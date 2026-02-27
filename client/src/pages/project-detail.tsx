@@ -212,24 +212,45 @@ function ProjectDetailContent() {
           <Copy className="w-3.5 h-3.5 mr-1.5" />
           Copy Link
         </Button>
-        <Link href={`/form/${project.slug}`} target="_blank">
-          <Button variant="outline" size="sm" disabled={project.status === "draft"} data-testid="button-open-form">
+        {project.status === "active" ? (
+          <a href={`/form/${project.slug}`} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" data-testid="button-open-form">
+              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+              Open Form
+            </Button>
+          </a>
+        ) : (
+          <Button variant="outline" size="sm" disabled data-testid="button-open-form">
             <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
             Open Form
           </Button>
-        </Link>
-        <Link href={`/roadmap/${project.slug}`} target="_blank">
-          <Button variant="outline" size="sm" disabled={project.status === "draft"} data-testid="button-open-roadmap">
+        )}
+        {project.status === "active" ? (
+          <a href={`/roadmap/${project.slug}`} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" data-testid="button-open-roadmap">
+              <Map className="w-3.5 h-3.5 mr-1.5" />
+              Roadmap
+            </Button>
+          </a>
+        ) : (
+          <Button variant="outline" size="sm" disabled data-testid="button-open-roadmap">
             <Map className="w-3.5 h-3.5 mr-1.5" />
             Roadmap
           </Button>
-        </Link>
-        <Link href={`/changelog/${project.slug}`} target="_blank">
-          <Button variant="outline" size="sm" disabled={project.status === "draft"} data-testid="button-open-changelog">
+        )}
+        {project.status === "active" ? (
+          <a href={`/changelog/${project.slug}`} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" data-testid="button-open-changelog">
+              <FileText className="w-3.5 h-3.5 mr-1.5" />
+              Changelog
+            </Button>
+          </a>
+        ) : (
+          <Button variant="outline" size="sm" disabled data-testid="button-open-changelog">
             <FileText className="w-3.5 h-3.5 mr-1.5" />
             Changelog
           </Button>
-        </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
