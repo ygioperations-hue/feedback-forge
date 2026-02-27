@@ -49,15 +49,39 @@ export default function Billing() {
   const { toast } = useToast();
   const [location] = useLocation();
   const [showSuccess, setShowSuccess] = useState(false);
+  const [verifyingCheckout, setVerifyingCheckout] = useState(false);
   const { activated, limits } = useActivation();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("success") === "true") {
-      setShowSuccess(true);
+    const isSuccess = params.get("success") === "true";
+    const sessionId = params.get("session_id");
+
+    if (isSuccess) {
       window.history.replaceState({}, "", "/billing");
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
+
+      if (sessionId) {
+        setVerifyingCheckout(true);
+        apiRequest("POST", "/api/billing/verify-checkout", { sessionId })
+          .then((res) => res.json())
+          .then(() => {
+            setShowSuccess(true);
+            queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/billing/history"] });
+          })
+          .catch((err) => {
+            console.error("Verify checkout failed:", err);
+            toast({ title: "Subscription setup", description: "Your payment was received. Your subscription will be activated shortly.", variant: "default" });
+            setShowSuccess(true);
+          })
+          .finally(() => setVerifyingCheckout(false));
+      } else {
+        setShowSuccess(true);
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
+      }
     }
   }, []);
 
@@ -147,6 +171,15 @@ export default function Billing() {
     const interval = subscription.interval;
     return `$${(amount / 100).toFixed(0)}/${interval === "year" ? "yr" : "mo"}`;
   };
+
+  if (verifyingCheckout) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium">Setting up your subscription...</p>
+      </div>
+    );
+  }
 
   if (billingLoading) {
     return (

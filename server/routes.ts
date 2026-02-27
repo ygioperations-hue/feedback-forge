@@ -764,7 +764,7 @@ export async function registerRoutes(
         payment_method_types: ['card'],
         line_items: [{ price: dbPlan.stripePriceId, quantity: 1 }],
         mode: 'subscription',
-        success_url: `${baseUrl}/billing?success=true`,
+        success_url: `${baseUrl}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/#pricing`,
         metadata: { userId: user.id, planId: dbPlan.id, plan: parsed.data.plan },
       });
@@ -773,6 +773,84 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Checkout error:", err?.message);
       res.status(500).json({ message: "Failed to create checkout session" });
+    }
+  });
+
+  app.post("/api/billing/verify-checkout", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({ sessionId: z.string().min(1) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Session ID is required" });
+      }
+
+      const user = await storage.getUserById(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(parsed.data.sessionId);
+
+      if (session.customer !== user.stripeCustomerId) {
+        return res.status(403).json({ message: "Session does not belong to this user" });
+      }
+
+      if (session.payment_status !== "paid") {
+        return res.status(400).json({ message: "Payment not completed" });
+      }
+
+      const stripeSubscriptionId = session.subscription as string;
+      if (!stripeSubscriptionId) {
+        return res.status(400).json({ message: "No subscription found in session" });
+      }
+
+      const existingSub = await storage.getSubscriptionByStripeId(stripeSubscriptionId);
+      if (existingSub) {
+        return res.json({ message: "Subscription already active", status: "active" });
+      }
+
+      const metadata = session.metadata || {};
+      const planId = metadata.planId;
+      if (!planId) {
+        return res.status(400).json({ message: "No plan information in session" });
+      }
+
+      let periodStart: Date = new Date();
+      let periodEnd: Date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      try {
+        const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+        const subAny = stripeSub as any;
+        const itemData = subAny.items?.data?.[0];
+        const parsedStart = subAny.current_period_start ? new Date(subAny.current_period_start * 1000) : null;
+        const parsedEnd = subAny.current_period_end ? new Date(subAny.current_period_end * 1000) : null;
+        if (parsedStart) periodStart = parsedStart;
+        if (parsedEnd) periodEnd = parsedEnd;
+      } catch (err: any) {
+        console.error("Failed to retrieve subscription details:", err.message);
+      }
+
+      await storage.createSubscription({
+        userId: user.id,
+        planId,
+        stripeSubscriptionId,
+        status: "active",
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        cancelAtPeriodEnd: false,
+      });
+
+      if (user.planType !== "lifetime") {
+        const plan = await storage.getPlanById(planId);
+        if (plan) {
+          const newPlanType = plan.interval === "year" ? "yearly" : "monthly";
+          await storage.updateUserPlanType(user.id, newPlanType);
+        }
+      }
+
+      res.json({ message: "Subscription activated", status: "active" });
+    } catch (err: any) {
+      console.error("Verify checkout error:", err?.message);
+      res.status(500).json({ message: "Failed to verify checkout session" });
     }
   });
 
