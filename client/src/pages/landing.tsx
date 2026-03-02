@@ -88,15 +88,12 @@ const plans = [
     name: "Monthly",
     price: "$29",
     period: "/month",
-    description: "For teams starting to collect feedback",
+    description: "No commitment — cancel anytime",
     features: [
-      "Unlimited projects",
-      "Unlimited responses",
-      "AI-powered insights",
-      "Public roadmap",
-      "Changelog page",
-      "Embeddable widget",
-      "Priority support",
+      "All features included",
+      "Unlimited projects & responses",
+      "AI insights, roadmap, changelog",
+      "Cancel or switch plans anytime",
     ],
   },
   {
@@ -104,16 +101,13 @@ const plans = [
     name: "Yearly",
     price: "$249",
     period: "/year",
-    description: "Best value — save $99 per year",
+    description: "Save $99/yr — best recurring value",
     savingsNote: "~$20.75/month — 2 months free!",
     features: [
       "Everything in Monthly",
-      "2 months free",
-      "Advanced analytics",
-      "Team collaboration",
-      "API access",
-      "White-label option",
-      "Custom branding",
+      "2 months free ($99 savings)",
+      "Priority support",
+      "Lock in yearly rate",
     ],
   },
 ];
@@ -141,6 +135,7 @@ export default function Landing() {
   const { toast } = useToast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [selectedLtdTier, setSelectedLtdTier] = useState<"starter" | "pro">("pro");
   const [ltdCode, setLtdCode] = useState("");
 
   useEffect(() => {
@@ -450,59 +445,103 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="text-center mb-6">
-            <h3 className="text-xl font-semibold">Lifetime Deal</h3>
-            <p className="text-sm text-muted-foreground">One payment, lifetime access. No recurring fees.</p>
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 bg-amber-500/10 text-amber-700 dark:text-amber-400 px-4 py-1.5 rounded-full text-sm font-medium mb-4">
+              <Crown className="w-4 h-4" />
+              Limited-Time Offer
+            </div>
+            <h3 className="text-2xl font-bold tracking-tight">Pay once, own it forever</h3>
+            <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
+              Lock in lifetime access at today's price. No monthly bills, no renewals — just one payment and you're set for life.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8">
-            <Card className="relative" data-testid="card-ltd-starter-landing">
-              <CardContent className="p-6 sm:p-8 space-y-6">
-                <div>
-                  <h3 className="text-xl font-semibold">Starter Lifetime</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Perfect for solo creators and small projects</p>
-                  <div className="flex items-baseline gap-1 mt-4">
-                    <span className="text-4xl font-bold">$69</span>
-                    <span className="text-muted-foreground">one-time</span>
-                  </div>
-                </div>
-                <ul className="space-y-3">
-                  {["Up to 3 projects", "Unlimited responses", "Public roadmap", "Changelog page", "Embeddable widget"].map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-sm">
-                      <Check className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card className="relative border-primary" data-testid="card-ltd-pro-landing">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <Badge data-testid="badge-ltd-popular-landing">Most Popular</Badge>
-              </div>
-              <CardContent className="p-6 sm:p-8 space-y-6">
-                <div>
-                  <h3 className="text-xl font-semibold">Pro Lifetime</h3>
-                  <p className="text-sm text-muted-foreground mt-1">For power users who need it all</p>
-                  <div className="flex items-baseline gap-1 mt-4">
-                    <span className="text-4xl font-bold">$129</span>
-                    <span className="text-muted-foreground">one-time</span>
-                  </div>
-                </div>
-                <ul className="space-y-3">
-                  {["Unlimited projects", "Unlimited responses", "AI-powered insights", "Public roadmap", "Changelog page", "Embeddable widget", "Priority support"].map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-sm">
-                      <Check className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
+            {([
+              {
+                id: "starter" as const,
+                name: "Starter",
+                price: "$69",
+                description: "Great entry point for solo creators",
+                highlights: [
+                  "Up to 3 feedback projects",
+                  "Unlimited responses & submissions",
+                  "Public roadmap & changelog",
+                  "Embeddable feedback widget",
+                  "All future platform updates",
+                  "No recurring fees, ever",
+                ],
+              },
+              {
+                id: "pro" as const,
+                name: "Pro",
+                price: "$129",
+                description: "Everything unlimited, forever",
+                savingsNote: "Saves $219+/yr vs Monthly plan",
+                highlights: [
+                  "Unlimited projects",
+                  "Unlimited responses & submissions",
+                  "AI-powered insights (GPT-4o)",
+                  "Public roadmap & changelog",
+                  "Embeddable feedback widget",
+                  "Priority support & all future updates",
+                  "No recurring fees, ever",
+                ],
+              },
+            ]).map((ltd) => {
+              const isSelected = selectedLtdTier === ltd.id;
+              return (
+                <Card
+                  key={ltd.id}
+                  onClick={() => setSelectedLtdTier(ltd.id)}
+                  className={`relative cursor-pointer transition-all ${
+                    isSelected
+                      ? "border-amber-500 shadow-md ring-2 ring-amber-500/20"
+                      : "border-border hover:border-amber-500/40"
+                  }`}
+                  data-testid={`card-ltd-${ltd.id}-landing`}
+                >
+                  {isSelected && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-amber-500 hover:bg-amber-600" data-testid={`badge-ltd-selected-${ltd.id}`}>
+                        {ltd.id === "pro" ? "Best Value" : "Selected"}
+                      </Badge>
+                    </div>
+                  )}
+                  {ltd.id === "pro" && !isSelected && (
+                    <div className="absolute -top-3 right-4">
+                      <Badge variant="secondary" className="text-xs" data-testid="badge-ltd-popular-landing">Most Popular</Badge>
+                    </div>
+                  )}
+                  <CardContent className="p-6 sm:p-8 space-y-6">
+                    <div>
+                      <h3 className="text-xl font-semibold">{ltd.name}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">{ltd.description}</p>
+                      <div className="flex items-baseline gap-1 mt-4">
+                        <span className="text-4xl font-bold">{ltd.price}</span>
+                        <span className="text-muted-foreground">one-time</span>
+                      </div>
+                      {"savingsNote" in ltd && ltd.savingsNote && isSelected && (
+                        <p className="text-sm text-amber-600 dark:text-amber-400 font-medium mt-2" data-testid="text-ltd-savings">
+                          {ltd.savingsNote}
+                        </p>
+                      )}
+                    </div>
+                    <ul className="space-y-3">
+                      {ltd.highlights.map((item, i) => (
+                        <li key={i} className="flex items-start gap-2.5 text-sm">
+                          <Check className={`w-4 h-4 shrink-0 mt-0.5 ${isSelected ? "text-amber-500" : "text-muted-foreground"}`} />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
-          <Card className="max-w-3xl mx-auto mb-12 border-amber-500/30" data-testid="card-ltd-landing">
+          <Card className="max-w-3xl mx-auto mb-16 border-amber-500/30" data-testid="card-ltd-landing">
             <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -511,7 +550,7 @@ export default function Landing() {
                   </div>
                   <div>
                     <h3 className="font-semibold">Have a Lifetime Deal code?</h3>
-                    <p className="text-sm text-muted-foreground">Your code determines whether you get Starter or Pro access</p>
+                    <p className="text-sm text-muted-foreground">Redeem your code to activate Starter or Pro access instantly</p>
                   </div>
                 </div>
                 {isAuthenticated ? (
@@ -543,9 +582,11 @@ export default function Landing() {
             </CardContent>
           </Card>
 
-          <div className="text-center mb-6">
-            <h3 className="text-xl font-semibold">Subscription Plans</h3>
-            <p className="text-sm text-muted-foreground">Flexible monthly or yearly billing</p>
+          <div className="text-center mb-8">
+            <h3 className="text-2xl font-bold tracking-tight">Prefer flexibility?</h3>
+            <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
+              Subscribe monthly or yearly. Cancel anytime, no commitments. All features included with every subscription.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
