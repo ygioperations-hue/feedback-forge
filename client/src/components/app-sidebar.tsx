@@ -14,6 +14,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 const customerNavItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -68,12 +69,26 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-3 border-t space-y-2">
         {user && (
-          <Link href="/profile">
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer transition-colors" data-testid="link-profile">
-              <User className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-sm truncate" data-testid="text-sidebar-user">{user.firstName} {user.lastName}</span>
-            </div>
-          </Link>
+          <div className="space-y-1">
+            {!isAdmin && user.planType && user.planType !== "none" && (
+              <div className="px-2">
+                <Badge variant="secondary" className="text-xs w-full justify-center" data-testid="badge-sidebar-plan">
+                  <Crown className="w-3 h-3 mr-1" />
+                  {user.planType === "lifetime_starter" ? "Starter Lifetime" :
+                   user.planType === "lifetime_pro" ? "Pro Lifetime" :
+                   user.planType === "lifetime" ? "Lifetime" :
+                   user.planType === "monthly" ? "Monthly" :
+                   user.planType === "yearly" ? "Yearly" : user.planType}
+                </Badge>
+              </div>
+            )}
+            <Link href="/profile">
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer transition-colors" data-testid="link-profile">
+                <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-sm truncate" data-testid="text-sidebar-user">{user.firstName} {user.lastName}</span>
+              </div>
+            </Link>
+          </div>
         )}
         <Button
           variant="ghost"

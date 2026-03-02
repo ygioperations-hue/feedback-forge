@@ -98,6 +98,7 @@ export const changelogItems = pgTable("changelog_items", {
 export const ltdCodes = pgTable("ltd_codes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),
+  tier: text("tier").notNull().default("pro"),
   isRedeemed: boolean("is_redeemed").notNull().default(false),
   redeemedAt: timestamp("redeemed_at"),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),

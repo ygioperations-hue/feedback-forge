@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Crown, Plus, Trash2, Hash, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -11,6 +13,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 type LtdCode = {
   id: string;
   code: string;
+  tier: string;
   isRedeemed: boolean;
   redeemedAt: string | null;
   userId: string | null;
@@ -20,18 +23,19 @@ type LtdCode = {
 
 export default function AdminLtd() {
   const { toast } = useToast();
+  const [selectedTier, setSelectedTier] = useState<string>("pro");
 
   const { data: codes, isLoading } = useQuery<LtdCode[]>({
     queryKey: ["/api/admin/ltd/codes"],
   });
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/admin/ltd/generate");
+    mutationFn: async (tier: string) => {
+      await apiRequest("POST", "/api/admin/ltd/generate", { tier });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ltd/codes"] });
-      toast({ title: "Code generated", description: "New LTD code has been created." });
+      toast({ title: "Code generated", description: `New ${selectedTier === "starter" ? "Starter" : "Pro"} LTD code has been created.` });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to generate code.", variant: "destructive" });
@@ -63,19 +67,30 @@ export default function AdminLtd() {
 
   return (
     <div className="p-6 space-y-6" data-testid="page-admin-ltd">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-ltd-title">LTD Codes</h1>
           <p className="text-muted-foreground">Generate and manage Lifetime Deal codes</p>
         </div>
-        <Button
-          onClick={() => generateMutation.mutate()}
-          disabled={generateMutation.isPending}
-          data-testid="button-generate-code"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {generateMutation.isPending ? "Generating..." : "Generate Code"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={selectedTier} onValueChange={setSelectedTier} data-testid="select-tier">
+            <SelectTrigger className="w-[140px]" data-testid="select-tier-trigger">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="starter" data-testid="select-tier-starter">Starter ($69)</SelectItem>
+              <SelectItem value="pro" data-testid="select-tier-pro">Pro ($129)</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            onClick={() => generateMutation.mutate(selectedTier)}
+            disabled={generateMutation.isPending}
+            data-testid="button-generate-code"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {generateMutation.isPending ? "Generating..." : "Generate Code"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
@@ -110,6 +125,7 @@ export default function AdminLtd() {
             <TableHeader>
               <TableRow>
                 <TableHead>Code</TableHead>
+                <TableHead>Tier</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Redeemed By</TableHead>
                 <TableHead>Date Used</TableHead>
@@ -121,7 +137,12 @@ export default function AdminLtd() {
                 <TableRow key={code.id} data-testid={`row-ltd-${code.id}`}>
                   <TableCell className="font-mono text-sm" data-testid={`text-code-${code.id}`}>{code.code}</TableCell>
                   <TableCell>
-                    <Badge variant={code.isRedeemed ? "secondary" : "default"} data-testid={`badge-status-${code.id}`}>
+                    <Badge variant={code.tier === "pro" ? "default" : "secondary"} data-testid={`badge-tier-${code.id}`}>
+                      {code.tier === "pro" ? "Pro" : "Starter"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={code.isRedeemed ? "secondary" : "outline"} data-testid={`badge-status-${code.id}`}>
                       {code.isRedeemed ? "Used" : "Available"}
                     </Badge>
                   </TableCell>
@@ -149,8 +170,8 @@ export default function AdminLtd() {
               ))}
               {codes?.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    No LTD codes yet. Click "Generate Code" to create one.
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    No LTD codes yet. Select a tier and click "Generate Code" to create one.
                   </TableCell>
                 </TableRow>
               )}

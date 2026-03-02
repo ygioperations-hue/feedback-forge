@@ -24,7 +24,9 @@ type AdminUser = {
 
 function planBadgeVariant(planType: string) {
   switch (planType) {
-    case "lifetime": return "default";
+    case "lifetime":
+    case "lifetime_starter":
+    case "lifetime_pro": return "default";
     case "yearly": return "secondary";
     case "monthly": return "outline";
     default: return "destructive";
@@ -130,6 +132,8 @@ export default function AdminUsers() {
                             <SelectItem value="monthly">monthly</SelectItem>
                             <SelectItem value="yearly">yearly</SelectItem>
                             <SelectItem value="lifetime">lifetime</SelectItem>
+                            <SelectItem value="lifetime_starter">lifetime_starter</SelectItem>
+                            <SelectItem value="lifetime_pro">lifetime_pro</SelectItem>
                           </SelectContent>
                         </Select>
                       )}

@@ -19,6 +19,13 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - Test account: test@feedbackforge.app / test1234 (customer, monthly)
 
 ## Recent Changes
+- 2026-03-02: Two LTD tiers: Starter ($69, 3 projects) and Pro ($129, unlimited). ltdCodes.tier column, planType values lifetime_starter/lifetime_pro
+- 2026-03-02: Admin LTD page: tier selector (Starter/Pro) for code generation, tier badge in table
+- 2026-03-02: Pricing/landing pages: two LTD tier cards with "Most Popular" badge on Pro, single redemption input
+- 2026-03-02: Billing page: shows Starter/Pro tier name and project usage for lifetime users
+- 2026-03-02: Sidebar: plan badge showing current tier (Starter Lifetime, Pro Lifetime, Monthly, Yearly)
+- 2026-03-02: Webhook handlers protect both lifetime_starter and lifetime_pro from override
+- 2026-03-02: Admin users page: planType dropdown includes lifetime_starter and lifetime_pro options
 - 2026-02-27: Security hardening: Helmet headers, log sanitization, mandatory Stripe webhook signatures, session secret enforcement
 - 2026-02-27: Removed forgot-password feature entirely (routes, page, login link, storage methods)
 - 2026-02-27: LTD redemption UX: auth cache invalidation + redirect to dashboard after success

@@ -839,7 +839,7 @@ export async function registerRoutes(
         cancelAtPeriodEnd: false,
       });
 
-      if (user.planType !== "lifetime") {
+      if (!user.planType?.startsWith("lifetime")) {
         const plan = await storage.getPlanById(planId);
         if (plan) {
           const newPlanType = plan.interval === "year" ? "yearly" : "monthly";
@@ -1036,7 +1036,8 @@ export async function registerRoutes(
       const redeemed = await storage.redeemLtdCode(parsed.data.code, uid);
       if (!redeemed) return res.status(400).json({ message: "Invalid or already redeemed code" });
       await storage.upgradeAllProjectsToLifetime(uid);
-      await storage.updateUserPlanType(uid, 'lifetime');
+      const planType = redeemed.tier === "starter" ? "lifetime_starter" : "lifetime_pro";
+      await storage.updateUserPlanType(uid, planType);
       res.json(redeemed);
     } catch (err) {
       res.status(500).json({ message: "Failed to redeem code" });
@@ -1084,7 +1085,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/users/:id/plan", requireAuth, requirePlatformAdmin, adminLimiter, async (req, res) => {
     try {
-      const schema = z.object({ planType: z.enum(["none", "monthly", "yearly", "lifetime"]) });
+      const schema = z.object({ planType: z.enum(["none", "monthly", "yearly", "lifetime", "lifetime_starter", "lifetime_pro"]) });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid plan type" });
 
@@ -1127,7 +1128,10 @@ export async function registerRoutes(
   app.post("/api/admin/ltd/generate", requireAuth, requirePlatformAdmin, ltdGenerateLimiter, async (req, res) => {
     try {
       const uid = req.session.userId!;
-      const code = await storage.generateLtdCode(uid);
+      const schema = z.object({ tier: z.enum(["starter", "pro"]).default("pro") });
+      const parsed = schema.safeParse(req.body || {});
+      const tier = parsed.success ? parsed.data.tier : "pro";
+      const code = await storage.generateLtdCode(uid, tier);
       res.status(201).json(code);
     } catch (err) {
       res.status(500).json({ message: "Failed to generate code" });
@@ -1159,14 +1163,15 @@ export async function registerRoutes(
 
       const { activated, plan } = await isUserActivated(uid);
 
+      const maxProjects = !activated ? 0 : (plan === "lifetime_starter" ? 3 : null);
       res.json({
         plan,
         activated,
         projectCount,
         totalResponses,
-        maxProjects: activated ? null : 0,
+        maxProjects,
         maxResponses: activated ? null : 0,
-        canCreateProject: activated,
+        canCreateProject: activated && (maxProjects === null || projectCount < maxProjects),
         canSubmitResponse: activated,
       });
     } catch (err) {

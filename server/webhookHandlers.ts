@@ -127,7 +127,7 @@ export class WebhookHandlers {
       cancelAtPeriodEnd: false,
     });
 
-    if (user.planType !== 'lifetime') {
+    if (!user.planType?.startsWith('lifetime')) {
       const plan = await storage.getPlanById(planId);
       if (plan) {
         const newPlanType = plan.interval === 'year' ? 'yearly' : 'monthly';
@@ -182,7 +182,7 @@ export class WebhookHandlers {
               cancelAtPeriodEnd,
             });
 
-            if (user.planType !== 'lifetime') {
+            if (!user.planType?.startsWith('lifetime')) {
               const newPlanType = matchedPlan.interval === 'year' ? 'yearly' : 'monthly';
               await storage.updateUserPlanType(user.id, newPlanType);
             }
@@ -219,7 +219,7 @@ export class WebhookHandlers {
 
     if (customerId && updateData.planId) {
       const user = await storage.getUserByStripeCustomerId(customerId);
-      if (user && user.planType !== 'lifetime') {
+      if (user && !user.planType?.startsWith('lifetime')) {
         const plans = await storage.getPlans();
         const newPlan = plans.find(p => p.id === updateData.planId);
         if (newPlan) {
@@ -247,7 +247,7 @@ export class WebhookHandlers {
 
     if (customerId) {
       const user = await storage.getUserByStripeCustomerId(customerId);
-      if (user && user.planType !== 'lifetime') {
+      if (user && !user.planType?.startsWith('lifetime')) {
         await storage.updateUserPlanType(user.id, 'none');
       }
     }

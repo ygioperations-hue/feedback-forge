@@ -80,7 +80,7 @@ export interface IStorage {
   upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
   getChangelogByProject(projectId: string): Promise<ChangelogItem[]>;
   createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem>;
-  generateLtdCode(userId: string): Promise<LtdCode>;
+  generateLtdCode(userId: string, tier?: string): Promise<LtdCode>;
   getLtdCodes(userId: string): Promise<LtdCode[]>;
   redeemLtdCode(code: string, userId: string): Promise<LtdCode | null>;
   getResponseCountByProject(projectId: string): Promise<number>;
@@ -387,9 +387,10 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async generateLtdCode(userId: string): Promise<LtdCode> {
-    const code = "FF-" + Array.from({ length: 3 }, () => Math.random().toString(36).substring(2, 6).toUpperCase()).join("-");
-    const [created] = await db.insert(ltdCodes).values({ code, userId }).returning();
+  async generateLtdCode(userId: string, tier: string = "pro"): Promise<LtdCode> {
+    const prefix = tier === "starter" ? "FS" : "FP";
+    const code = prefix + "-" + Array.from({ length: 3 }, () => Math.random().toString(36).substring(2, 6).toUpperCase()).join("-");
+    const [created] = await db.insert(ltdCodes).values({ code, userId, tier }).returning();
     return created;
   }
 

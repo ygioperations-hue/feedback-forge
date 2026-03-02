@@ -441,16 +441,36 @@ export default function Billing() {
                 </a>
               </div>
             </div>
-          ) : limits?.plan === "lifetime" ? (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-500/10">
-                <Crown className="w-5 h-5 text-amber-500" />
+          ) : limits?.plan?.startsWith("lifetime") ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-500/10">
+                  <Crown className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-lg" data-testid="text-plan-name">
+                    {limits.plan === "lifetime_starter" ? "Starter Lifetime" : limits.plan === "lifetime_pro" ? "Pro Lifetime" : "Lifetime Deal"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {limits.plan === "lifetime_starter"
+                      ? "Up to 3 projects — no recurring charges"
+                      : "Unlimited access forever — no recurring charges"}
+                  </p>
+                </div>
+                <Badge className="ml-auto" data-testid="badge-plan-status">Active</Badge>
               </div>
-              <div>
-                <p className="font-semibold text-lg" data-testid="text-plan-name">Lifetime Deal</p>
-                <p className="text-sm text-muted-foreground">Unlimited access forever — no recurring charges</p>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="text-sm">
+                  <p className="text-muted-foreground">Projects</p>
+                  <p className="font-medium" data-testid="text-ltd-projects">
+                    {limits.projectCount} / {limits.maxProjects ?? "Unlimited"}
+                  </p>
+                </div>
+                <div className="text-sm">
+                  <p className="text-muted-foreground">Responses</p>
+                  <p className="font-medium" data-testid="text-ltd-responses">Unlimited</p>
+                </div>
               </div>
-              <Badge className="ml-auto" data-testid="badge-plan-status">Active</Badge>
             </div>
           ) : (
             <div className="text-center py-4">

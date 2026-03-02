@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Check, MessageSquareText, Shield, Zap, Crown, Users, BarChart3, Code, Star, Lock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
-const plans = [
+const subscriptionPlans = [
   {
     name: "Monthly",
     price: "$29",
@@ -45,6 +45,39 @@ const plans = [
     cta: "Get Started",
     variant: "outline" as const,
     popular: false,
+  },
+];
+
+const ltdTiers = [
+  {
+    name: "Starter Lifetime",
+    tier: "starter",
+    price: "$69",
+    description: "Perfect for solo creators and small projects",
+    features: [
+      "Up to 3 projects",
+      "Unlimited responses",
+      "Public roadmap",
+      "Changelog page",
+      "Embeddable widget",
+    ],
+    popular: false,
+  },
+  {
+    name: "Pro Lifetime",
+    tier: "pro",
+    price: "$129",
+    description: "For power users who need it all",
+    features: [
+      "Unlimited projects",
+      "Unlimited responses",
+      "AI-powered insights",
+      "Public roadmap",
+      "Changelog page",
+      "Embeddable widget",
+      "Priority support",
+    ],
+    popular: true,
   },
 ];
 
@@ -103,6 +136,7 @@ export default function Pricing() {
   });
 
   const activated = limits?.activated ?? false;
+  const isLifetime = limits?.plan?.startsWith("lifetime") ?? false;
 
   return (
     <div className="min-h-screen bg-background">
@@ -131,53 +165,99 @@ export default function Pricing() {
           </h1>
           <p className="text-muted-foreground max-w-lg mx-auto">
             {activated
-              ? "Your account is active with unlimited access to all features."
+              ? "Your account is active with access to all features."
               : "Choose a plan or redeem a Lifetime Deal code to unlock all features."}
           </p>
-          {activated && (
+          {isLifetime && (
             <Badge variant="default" className="text-sm" data-testid="badge-lifetime-active">
               <Crown className="w-3.5 h-3.5 mr-1" />
-              Lifetime Deal Active
+              {limits?.plan === "lifetime_starter" ? "Starter Lifetime Active" : "Pro Lifetime Active"}
             </Badge>
           )}
         </div>
 
         {!activated && (
-          <Card className="mb-8 border-amber-500/30" data-testid="card-ltd-redeem">
-            <CardContent className="p-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10 shrink-0">
-                    <Crown className="w-5 h-5 text-amber-500" />
+          <>
+            <div className="text-center mb-6">
+              <h2 className="text-xl font-semibold" data-testid="text-ltd-section-title">Lifetime Deal</h2>
+              <p className="text-sm text-muted-foreground">One payment, lifetime access. No recurring fees.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-3xl mx-auto">
+              {ltdTiers.map((ltd) => (
+                <Card
+                  key={ltd.tier}
+                  className={`relative ${ltd.popular ? "border-primary" : ""}`}
+                  data-testid={`card-ltd-${ltd.tier}`}
+                >
+                  {ltd.popular && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge variant="default" data-testid="badge-ltd-popular">Most Popular</Badge>
+                    </div>
+                  )}
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-lg">{ltd.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground">{ltd.description}</p>
+                    <div className="flex items-baseline gap-1 pt-2">
+                      <span className="text-3xl font-bold">{ltd.price}</span>
+                      <span className="text-sm text-muted-foreground">one-time</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2.5">
+                      {ltd.features.map((feature, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="mb-12 border-amber-500/30 max-w-3xl mx-auto" data-testid="card-ltd-redeem">
+              <CardContent className="p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10 shrink-0">
+                      <Crown className="w-5 h-5 text-amber-500" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Have a Lifetime Deal code?</h3>
+                      <p className="text-sm text-muted-foreground">Your code determines whether you get Starter or Pro access</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold">Have a Lifetime Deal code?</h3>
-                    <p className="text-sm text-muted-foreground">Enter your code to unlock unlimited access forever - one payment, no recurring fees</p>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <Input
+                      placeholder="FS-XXXX or FP-XXXX"
+                      value={ltdCode}
+                      onChange={(e) => setLtdCode(e.target.value)}
+                      className="w-48"
+                      data-testid="input-ltd-code"
+                    />
+                    <Button
+                      onClick={() => redeemMutation.mutate()}
+                      disabled={!ltdCode.trim() || redeemMutation.isPending}
+                      data-testid="button-redeem-ltd"
+                    >
+                      {redeemMutation.isPending ? "Redeeming..." : "Redeem"}
+                    </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Input
-                    placeholder="FF-XXXX-XXXX-XXXX"
-                    value={ltdCode}
-                    onChange={(e) => setLtdCode(e.target.value)}
-                    className="w-48"
-                    data-testid="input-ltd-code"
-                  />
-                  <Button
-                    onClick={() => redeemMutation.mutate()}
-                    disabled={!ltdCode.trim() || redeemMutation.isPending}
-                    data-testid="button-redeem-ltd"
-                  >
-                    {redeemMutation.isPending ? "Redeeming..." : "Redeem"}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </>
         )}
 
-        <div className={`grid grid-cols-1 ${activated ? "md:grid-cols-2" : "md:grid-cols-2"} gap-6 mb-12 max-w-3xl mx-auto`}>
-          {plans.map((plan) => (
+        <div className="text-center mb-6">
+          <h2 className="text-xl font-semibold">Subscription Plans</h2>
+          <p className="text-sm text-muted-foreground">Flexible monthly or yearly billing</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12 max-w-3xl mx-auto">
+          {subscriptionPlans.map((plan) => (
             <Card
               key={plan.name}
               className={`relative ${plan.popular && !activated ? "border-primary" : ""}`}

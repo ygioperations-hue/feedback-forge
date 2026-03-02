@@ -450,7 +450,59 @@ export default function Landing() {
             </p>
           </div>
 
-          <Card className="max-w-3xl mx-auto mb-10 border-amber-500/30" data-testid="card-ltd-landing">
+          <div className="text-center mb-6">
+            <h3 className="text-xl font-semibold">Lifetime Deal</h3>
+            <p className="text-sm text-muted-foreground">One payment, lifetime access. No recurring fees.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8">
+            <Card className="relative" data-testid="card-ltd-starter-landing">
+              <CardContent className="p-6 sm:p-8 space-y-6">
+                <div>
+                  <h3 className="text-xl font-semibold">Starter Lifetime</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Perfect for solo creators and small projects</p>
+                  <div className="flex items-baseline gap-1 mt-4">
+                    <span className="text-4xl font-bold">$69</span>
+                    <span className="text-muted-foreground">one-time</span>
+                  </div>
+                </div>
+                <ul className="space-y-3">
+                  {["Up to 3 projects", "Unlimited responses", "Public roadmap", "Changelog page", "Embeddable widget"].map((feature, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card className="relative border-primary" data-testid="card-ltd-pro-landing">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <Badge data-testid="badge-ltd-popular-landing">Most Popular</Badge>
+              </div>
+              <CardContent className="p-6 sm:p-8 space-y-6">
+                <div>
+                  <h3 className="text-xl font-semibold">Pro Lifetime</h3>
+                  <p className="text-sm text-muted-foreground mt-1">For power users who need it all</p>
+                  <div className="flex items-baseline gap-1 mt-4">
+                    <span className="text-4xl font-bold">$129</span>
+                    <span className="text-muted-foreground">one-time</span>
+                  </div>
+                </div>
+                <ul className="space-y-3">
+                  {["Unlimited projects", "Unlimited responses", "AI-powered insights", "Public roadmap", "Changelog page", "Embeddable widget", "Priority support"].map((feature, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="max-w-3xl mx-auto mb-12 border-amber-500/30" data-testid="card-ltd-landing">
             <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -459,13 +511,13 @@ export default function Landing() {
                   </div>
                   <div>
                     <h3 className="font-semibold">Have a Lifetime Deal code?</h3>
-                    <p className="text-sm text-muted-foreground">Enter your code to unlock unlimited access forever — one payment, no recurring fees</p>
+                    <p className="text-sm text-muted-foreground">Your code determines whether you get Starter or Pro access</p>
                   </div>
                 </div>
                 {isAuthenticated ? (
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     <Input
-                      placeholder="FF-XXXX-XXXX-XXXX"
+                      placeholder="FS-XXXX or FP-XXXX"
                       value={ltdCode}
                       onChange={(e) => setLtdCode(e.target.value)}
                       className="w-48"
@@ -490,6 +542,11 @@ export default function Landing() {
               </div>
             </CardContent>
           </Card>
+
+          <div className="text-center mb-6">
+            <h3 className="text-xl font-semibold">Subscription Plans</h3>
+            <p className="text-sm text-muted-foreground">Flexible monthly or yearly billing</p>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
             {plans.map((plan) => {
