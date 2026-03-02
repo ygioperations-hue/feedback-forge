@@ -28,7 +28,7 @@ export async function seedDatabase() {
       firstName: "Demo",
       lastName: "User",
       role: "platform_admin",
-      planType: "lifetime",
+      planType: "lifetime_pro",
     }).returning();
     userId = user.id;
   }

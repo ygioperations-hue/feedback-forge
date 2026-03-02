@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Plus, Trash2, GripVertical, Star, MessageSquareText, ListChecks } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, Star, MessageSquareText, ListChecks, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 import { PaywallGate } from "@/components/paywall-gate";
 
@@ -39,11 +40,23 @@ export default function ProjectNew() {
   );
 }
 
+type PlanLimits = {
+  activated: boolean;
+  plan: string;
+  projectCount: number;
+  maxProjects: number | null;
+  canCreateProject: boolean;
+};
+
 function ProjectNewContent() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+
+  const { data: limits, isLoading: limitsLoading } = useQuery<PlanLimits>({
+    queryKey: ["/api/limits"],
+  });
   const [questions, setQuestions] = useState<QuestionDraft[]>([
     { id: "1", label: "", type: "rating", required: true, options: [] },
   ]);
@@ -120,7 +133,8 @@ function ProjectNewContent() {
     );
   };
 
-  const canSubmit = name.trim() !== "" && questions.every((q) => q.label.trim() !== "");
+  const atLimit = limits ? !limits.canCreateProject : false;
+  const canSubmit = !limitsLoading && !atLimit && name.trim() !== "" && questions.every((q) => q.label.trim() !== "");
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -135,6 +149,16 @@ function ProjectNewContent() {
           <p className="text-sm text-muted-foreground mt-1">Set up a new feedback collection project</p>
         </div>
       </div>
+
+      {atLimit && limits?.maxProjects && (
+        <Alert variant="destructive" data-testid="alert-project-limit">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            You've reached the maximum of {limits.maxProjects} projects on your Starter Lifetime plan.
+            Contact support or upgrade to Pro Lifetime for unlimited projects.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>

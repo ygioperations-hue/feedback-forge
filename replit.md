@@ -5,7 +5,7 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 
 ## Roles
 - **platform_admin**: Full platform access, user management, LTD code management, admin dashboard. Bypasses paywall. Cannot subscribe via Stripe.
-- **customer**: Feedback collection, projects, responses, billing. Requires active plan (monthly/yearly/lifetime) to use features.
+- **customer**: Feedback collection, projects, responses, billing. Requires active plan (monthly/yearly/lifetime_starter/lifetime_pro) to use features.
 
 ## Authentication
 - Session-based auth using express-session + connect-pg-simple (PostgreSQL session store)
@@ -15,17 +15,20 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - Public pages (forms, roadmaps, changelogs, widget submissions, upvotes) remain unauthenticated
 - Middleware chain: `requireAuth` (loads user) → `requirePlatformAdmin` (role check) or `requireActivePlan` (plan check)
 - Frontend guards: `RequireAuth` (auth gate), `RequireCustomer` (redirects admin to /admin), `RequireAdmin` (redirects customer to /dashboard)
-- Demo account: demo@feedbackforge.app / password123 (platform_admin, lifetime)
+- Demo account: demo@feedbackforge.app / password123 (platform_admin, lifetime_pro)
 - Test account: test@feedbackforge.app / test1234 (customer, monthly)
 
 ## Recent Changes
+- 2026-03-02: Enforced Starter Lifetime 3-project limit on backend (POST /api/projects returns 403 at limit) and frontend (alert + disabled create button)
+- 2026-03-02: Removed plain "lifetime" planType — only lifetime_starter and lifetime_pro exist now
+- 2026-03-02: Removed admin planType change dropdown — admin users page is now read-only for plan display
+- 2026-03-02: Removed PATCH /api/admin/users/:id/plan route (unsafe — didn't sync with Stripe)
 - 2026-03-02: Two LTD tiers: Starter ($69, 3 projects) and Pro ($129, unlimited). ltdCodes.tier column, planType values lifetime_starter/lifetime_pro
 - 2026-03-02: Admin LTD page: tier selector (Starter/Pro) for code generation, tier badge in table
 - 2026-03-02: Pricing/landing pages: two LTD tier cards with "Most Popular" badge on Pro, single redemption input
 - 2026-03-02: Billing page: shows Starter/Pro tier name and project usage for lifetime users
 - 2026-03-02: Sidebar: plan badge showing current tier (Starter Lifetime, Pro Lifetime, Monthly, Yearly)
 - 2026-03-02: Webhook handlers protect both lifetime_starter and lifetime_pro from override
-- 2026-03-02: Admin users page: planType dropdown includes lifetime_starter and lifetime_pro options
 - 2026-02-27: Security hardening: Helmet headers, log sanitization, mandatory Stripe webhook signatures, session secret enforcement
 - 2026-02-27: Removed forgot-password feature entirely (routes, page, login link, storage methods)
 - 2026-02-27: LTD redemption UX: auth cache invalidation + redirect to dashboard after success
@@ -35,13 +38,13 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - 2026-02-27: Error states added to admin dashboard, admin users, public roadmap upvote
 - 2026-02-27: Mobile-friendly admin tables with horizontal scroll
 - 2026-02-26: Added platform admin role with full route/UI separation (T001-T011)
-- 2026-02-26: Added `role` (customer/platform_admin) and `planType` (none/monthly/yearly/lifetime) to users table
+- 2026-02-26: Added `role` (customer/platform_admin) and `planType` (none/monthly/yearly/lifetime_starter/lifetime_pro) to users table
 - 2026-02-26: Refactored requireAuth to load full user onto req.user; added requirePlatformAdmin, requireActivePlan middleware
 - 2026-02-26: isUserActivated() now uses user.planType as primary check (no more LTD/project/subscription queries)
 - 2026-02-26: Stripe webhooks sync user.planType on checkout, subscription update/delete (lifetime never overridden)
-- 2026-02-26: LTD redeem sets user.planType = 'lifetime'
+- 2026-02-26: LTD redeem sets user.planType = 'lifetime_starter' or 'lifetime_pro' based on code tier
 - 2026-02-26: Admin API routes: /api/admin/stats, /api/admin/users, /api/admin/ltd/codes (all requirePlatformAdmin)
-- 2026-02-26: Admin pages: /admin (dashboard), /admin/users (user management), /admin/ltd (LTD codes)
+- 2026-02-26: Admin pages: /admin (dashboard), /admin/users (read-only plan display + delete), /admin/ltd (LTD codes)
 - 2026-02-26: Sidebar shows different nav for admin vs customer
 - 2026-02-26: Frontend route guards prevent cross-role access
 - 2026-02-26: Removed old /ltd-admin route and page
@@ -70,12 +73,12 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - `server/stripe-setup.ts` - Auto-creates Stripe product/prices on startup
 - `server/webhookHandlers.ts` - Stripe webhook handlers with planType sync (lifetime protected)
 - `client/public/widget.js` - Hosted feedback widget script
-- `server/seed.ts` - Seeds plans, demo user (admin), test user (customer), sample projects
+- `server/seed.ts` - Seeds plans, demo user (admin, lifetime_pro), test user (customer, monthly), sample projects
 - `client/src/lib/auth.tsx` - AuthProvider with user (includes role, planType), RequireAuth gate
 - `client/src/components/app-sidebar.tsx` - Role-based sidebar navigation
 - `client/src/components/paywall-gate.tsx` - PaywallGate (admin bypasses, customer checks planType)
 - `client/src/pages/admin-dashboard.tsx` - Admin stats overview (/admin)
-- `client/src/pages/admin-users.tsx` - User management with plan change and delete (/admin/users)
+- `client/src/pages/admin-users.tsx` - User list with read-only plan badges and delete (/admin/users)
 - `client/src/pages/admin-ltd.tsx` - LTD code management (/admin/ltd)
 - `client/src/pages/` - Dashboard, Projects, ProjectNew, ProjectDetail, PublicForm, PublicRoadmap, PublicChangelog, ResponsesList, ResponseDetail, Pricing, Profile, Billing, Login, Signup
 
@@ -91,7 +94,7 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - PATCH /api/auth/password - Change password
 - GET /api/projects - List user's projects
 - GET /api/projects/:id - Get project (userId-checked)
-- POST /api/projects - Create project (paywall-checked)
+- POST /api/projects - Create project (paywall-checked, enforces 3-project limit for lifetime_starter)
 - PATCH /api/projects/:id/status - Toggle project status
 - DELETE /api/projects/:id - Delete project
 - GET /api/projects/:id/responses - Responses for project
@@ -100,8 +103,8 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - POST /api/ai/summary - AI summary (paywall-checked)
 - POST /api/roadmap/:slug/items - Create roadmap item
 - POST /api/changelog/:slug/items - Create changelog item
-- POST /api/ltd/redeem - Redeem LTD code (sets planType=lifetime)
-- GET /api/limits - Plan usage/limits
+- POST /api/ltd/redeem - Redeem LTD code (sets planType=lifetime_starter or lifetime_pro based on code tier)
+- GET /api/limits - Plan usage/limits (includes canCreateProject, maxProjects)
 - POST /api/billing/checkout - Stripe checkout (blocked for platform_admin)
 - POST /api/billing/verify-checkout - Direct checkout session verification (creates subscription without webhook)
 - GET /api/billing/status - Subscription status
@@ -112,8 +115,7 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 
 ### Admin (requireAuth + requirePlatformAdmin, rate-limited)
 - GET /api/admin/stats - Platform stats (users, subscriptions, lifetime, projects, feedback, MRR)
-- GET /api/admin/users - All users with role, planType, projectCount, joinDate
-- PATCH /api/admin/users/:id/plan - Change user's planType
+- GET /api/admin/users - All users with role, planType, projectCount, joinDate (read-only display)
 - DELETE /api/admin/users/:id - Delete user (prevents self-deletion, cascading delete)
 - GET /api/admin/ltd/codes - All LTD codes with redeemer info
 - POST /api/admin/ltd/generate - Generate new LTD code
@@ -130,7 +132,7 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - GET /api/plans - Available plans
 
 ## Database Schema
-- **users**: id, email, password, firstName, lastName, role (customer/platform_admin), planType (none/monthly/yearly/lifetime), stripeCustomerId, resetToken, resetTokenExpiry, createdAt
+- **users**: id, email, password, firstName, lastName, role (customer/platform_admin), planType (none/monthly/yearly/lifetime_starter/lifetime_pro), stripeCustomerId, resetToken, resetTokenExpiry, createdAt
 - **plans**: id, name, price (cents), interval (month/year), stripePriceId, createdAt
 - **subscriptions**: id, userId, planId, stripeSubscriptionId, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt
 - **projects**: id, name, description, status, slug, plan, userId, createdAt
@@ -139,24 +141,27 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - **answers**: id, responseId, questionId, value
 - **roadmapItems**: id, projectId, title, description, status, upvotes, order, createdAt
 - **changelogItems**: id, projectId, title, description, type, publishedAt
-- **ltdCodes**: id, code, isRedeemed, redeemedAt, userId, createdAt
+- **ltdCodes**: id, code, tier (starter/pro), isRedeemed, redeemedAt, userId, createdAt
 
 ## Security
 - All customer data queries filter by userId (enforced at both route and storage layer)
 - Admin routes protected by requirePlatformAdmin middleware + rate limiting (100 req/15min)
 - Self-deletion prevented on admin user management
 - Platform admin cannot access Stripe checkout (403)
-- Stripe webhooks never override planType='lifetime' with 'none'
+- Stripe webhooks never override lifetime planTypes with 'none'
 - Frontend route guards prevent cross-role access
 - Answer/question queries properly scoped (no full-table scans)
+- Starter Lifetime enforced to 3-project limit on both server and client
 
 ## Pricing & Paywall (No Free Tier)
 - No free accounts: must be activated via paid plan or LTD code
 - Monthly: $29/month, Yearly: $249/year (Stripe Hosted Checkout)
-- Lifetime deal: Via redeemable codes generated by admin
+- Lifetime Deal Starter: $69, 3 projects max (via redeemable codes, prefix FS-)
+- Lifetime Deal Pro: $129, unlimited projects (via redeemable codes, prefix FP-)
 - isUserActivated() checks user.planType; platform_admin always activated
 - PaywallGate component gates customer pages; admin bypasses
 - Server-side enforcement on create/submit routes
+- Project creation limit enforced server-side for lifetime_starter (403 at 3 projects)
 
 ## User Preferences
 - None recorded yet

@@ -478,7 +478,7 @@ export class DatabaseStorage implements IStorage {
   }> {
     const allUsers = await db.select().from(users);
     const totalUsers = allUsers.length;
-    const lifetimeUsers = allUsers.filter(u => u.planType === 'lifetime').length;
+    const lifetimeUsers = allUsers.filter(u => u.planType?.startsWith('lifetime')).length;
 
     const activeSubs = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
     const activeSubscriptions = activeSubs.length;

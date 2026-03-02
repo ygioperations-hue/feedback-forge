@@ -141,7 +141,7 @@ async function isUserActivated(userId: string): Promise<{ activated: boolean; pl
   if (!user) return { activated: false, plan: "none" };
 
   if (user.role === "platform_admin") {
-    return { activated: true, plan: "lifetime" };
+    return { activated: true, plan: "lifetime_pro" };
   }
 
   if (user.planType !== "none") {
@@ -343,10 +343,17 @@ export async function registerRoutes(
   app.post("/api/projects", requireAuth, async (req, res) => {
     try {
       const uid = req.session.userId!;
-      const { activated } = await isUserActivated(uid);
+      const { activated, plan } = await isUserActivated(uid);
 
       if (!activated) {
         return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
+      }
+
+      if (plan === "lifetime_starter") {
+        const existingProjects = await storage.getProjectsByUserId(uid);
+        if (existingProjects.length >= 3) {
+          return res.status(403).json({ message: "Starter Lifetime plan is limited to 3 projects. Upgrade to Pro Lifetime for unlimited projects." });
+        }
       }
 
       const parsed = createProjectBodySchema.safeParse(req.body);
@@ -1080,22 +1087,6 @@ export async function registerRoutes(
       res.json(usersWithCounts);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch users" });
-    }
-  });
-
-  app.patch("/api/admin/users/:id/plan", requireAuth, requirePlatformAdmin, adminLimiter, async (req, res) => {
-    try {
-      const schema = z.object({ planType: z.enum(["none", "monthly", "yearly", "lifetime", "lifetime_starter", "lifetime_pro"]) });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Invalid plan type" });
-
-      const targetUser = await storage.getUserById(p(req.params.id));
-      if (!targetUser) return res.status(404).json({ message: "User not found" });
-
-      const updated = await storage.updateUserPlanType(targetUser.id, parsed.data.planType);
-      res.json({ id: updated.id, email: updated.email, planType: updated.planType });
-    } catch (err) {
-      res.status(500).json({ message: "Failed to update user plan" });
     }
   });
 

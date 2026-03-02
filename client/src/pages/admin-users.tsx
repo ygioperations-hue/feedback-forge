@@ -1,6 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,12 +23,22 @@ type AdminUser = {
 
 function planBadgeVariant(planType: string) {
   switch (planType) {
-    case "lifetime":
     case "lifetime_starter":
     case "lifetime_pro": return "default";
     case "yearly": return "secondary";
     case "monthly": return "outline";
     default: return "destructive";
+  }
+}
+
+function planLabel(planType: string) {
+  switch (planType) {
+    case "lifetime_starter": return "Starter Lifetime";
+    case "lifetime_pro": return "Pro Lifetime";
+    case "monthly": return "Monthly";
+    case "yearly": return "Yearly";
+    case "none": return "None";
+    default: return planType;
   }
 }
 
@@ -39,20 +48,6 @@ export default function AdminUsers() {
 
   const { data: users, isLoading, error } = useQuery<AdminUser[]>({
     queryKey: ["/api/admin/users"],
-  });
-
-  const changePlanMutation = useMutation({
-    mutationFn: async ({ userId, planType }: { userId: string; planType: string }) => {
-      await apiRequest("PATCH", `/api/admin/users/${userId}/plan`, { planType });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      toast({ title: "Plan updated", description: "User plan has been changed." });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update plan.", variant: "destructive" });
-    },
   });
 
   const deleteUserMutation = useMutation({
@@ -73,7 +68,7 @@ export default function AdminUsers() {
     <div className="p-6 space-y-6" data-testid="page-admin-users">
       <div>
         <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-users-title">Users</h1>
-        <p className="text-muted-foreground">Manage platform users and their plans</p>
+        <p className="text-muted-foreground">View platform users and manage accounts</p>
       </div>
 
       {error && (
@@ -116,27 +111,9 @@ export default function AdminUsers() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {isSelf ? (
-                        <Badge variant={planBadgeVariant(u.planType)} data-testid={`badge-plan-${u.id}`}>{u.planType}</Badge>
-                      ) : (
-                        <Select
-                          value={u.planType}
-                          onValueChange={(val) => changePlanMutation.mutate({ userId: u.id, planType: val })}
-                          disabled={changePlanMutation.isPending}
-                        >
-                          <SelectTrigger className="w-[120px] h-8" data-testid={`select-plan-${u.id}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">none</SelectItem>
-                            <SelectItem value="monthly">monthly</SelectItem>
-                            <SelectItem value="yearly">yearly</SelectItem>
-                            <SelectItem value="lifetime">lifetime</SelectItem>
-                            <SelectItem value="lifetime_starter">lifetime_starter</SelectItem>
-                            <SelectItem value="lifetime_pro">lifetime_pro</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Badge variant={planBadgeVariant(u.planType)} data-testid={`badge-plan-${u.id}`}>
+                        {planLabel(u.planType)}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-center" data-testid={`text-projects-${u.id}`}>{u.projectCount}</TableCell>
                     <TableCell data-testid={`text-joined-${u.id}`}>
