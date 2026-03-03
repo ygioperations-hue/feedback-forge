@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FolderPlus, ExternalLink, MoreVertical, Copy, Trash2 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +26,7 @@ export default function Projects() {
 }
 
 function ProjectsContent() {
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -87,35 +88,40 @@ function ProjectsContent() {
           {projects.map((project) => {
             const responseCount = responses?.filter((r) => r.projectId === project.id).length ?? 0;
             return (
-              <Card key={project.id} className="hover-elevate" data-testid={`card-project-${project.id}`}>
+              <Card
+                key={project.id}
+                className="hover-elevate cursor-pointer"
+                data-testid={`card-project-${project.id}`}
+                onClick={() => navigate(`/projects/${project.id}`)}
+              >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-2">
-                    <Link href={`/projects/${project.id}`}>
-                      <h3 className="text-sm font-semibold cursor-pointer" data-testid={`text-project-name-${project.id}`}>
-                        {project.name}
-                      </h3>
-                    </Link>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost" data-testid={`button-project-menu-${project.id}`}>
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => copyFormLink(project.slug)} data-testid={`button-copy-link-${project.id}`}>
-                          <Copy className="w-4 h-4 mr-2" />
-                          Copy form link
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => deleteMutation.mutate(project.id)}
-                          data-testid={`button-delete-project-${project.id}`}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <h3 className="text-sm font-semibold" data-testid={`text-project-name-${project.id}`}>
+                      {project.name}
+                    </h3>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="icon" variant="ghost" data-testid={`button-project-menu-${project.id}`}>
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => copyFormLink(project.slug)} data-testid={`button-copy-link-${project.id}`}>
+                            <Copy className="w-4 h-4 mr-2" />
+                            Copy form link
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => deleteMutation.mutate(project.id)}
+                            data-testid={`button-delete-project-${project.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                   {project.description && (
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{project.description}</p>
@@ -127,12 +133,14 @@ function ProjectsContent() {
                       </Badge>
                       <span className="text-xs text-muted-foreground">{responseCount} responses</span>
                     </div>
-                    <Link href={`/form/${project.slug}`} target="_blank">
-                      <Button variant="ghost" size="sm" data-testid={`button-view-form-${project.id}`}>
-                        <ExternalLink className="w-3 h-3 mr-1" />
-                        View Form
-                      </Button>
-                    </Link>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Link href={`/form/${project.slug}`} target="_blank">
+                        <Button variant="ghost" size="sm" data-testid={`button-view-form-${project.id}`}>
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          View Form
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
