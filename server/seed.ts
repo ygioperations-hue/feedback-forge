@@ -1,5 +1,6 @@
 import { db } from "./storage";
 import { users, plans, projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export async function seedDatabase() {
@@ -142,4 +143,21 @@ export async function seedDatabase() {
   }
 
   console.log("Database seeded successfully (demo@feedbackforge.app / password123)");
+
+  const adminEmail = "ygi.operations@gmail.com";
+  const existingAdmin = await db.select().from(users).where(
+    eq(users.email, adminEmail)
+  );
+  if (existingAdmin.length === 0) {
+    const adminHash = await bcrypt.hash("admin123", 10);
+    await db.insert(users).values({
+      email: adminEmail,
+      password: adminHash,
+      firstName: "Admin",
+      lastName: "User",
+      role: "platform_admin",
+      planType: "lifetime_pro",
+    });
+    console.log(`Admin account created: ${adminEmail}`);
+  }
 }
