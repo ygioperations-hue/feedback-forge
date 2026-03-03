@@ -24,6 +24,7 @@ import {
   ThumbsUp,
   Menu,
   X,
+  Mail,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -737,6 +738,14 @@ export default function Landing() {
               </div>
               <span className="text-sm font-semibold" data-testid="text-footer-brand">FeedbackForge</span>
             </div>
+            <a
+              href="mailto:ygi.operations@gmail.com"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="link-footer-support"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              ygi.operations@gmail.com
+            </a>
             <p className="text-xs text-muted-foreground" data-testid="text-footer-copy">
               &copy; {new Date().getFullYear()} FeedbackForge. All rights reserved.
             </p>
