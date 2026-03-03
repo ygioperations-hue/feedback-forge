@@ -13,6 +13,23 @@ export async function seedDatabase() {
     console.log("Plans seeded: Monthly ($29/mo), Yearly ($249/yr)");
   }
 
+  const adminEmail = "ygi.operations@gmail.com";
+  const existingAdmin = await db.select().from(users).where(
+    eq(users.email, adminEmail)
+  );
+  if (existingAdmin.length === 0) {
+    const adminHash = await bcrypt.hash("admin123", 10);
+    await db.insert(users).values({
+      email: adminEmail,
+      password: adminHash,
+      firstName: "Admin",
+      lastName: "User",
+      role: "platform_admin",
+      planType: "lifetime_pro",
+    });
+    console.log(`Admin account created: ${adminEmail}`);
+  }
+
   const existingProjects = await db.select().from(projects);
   if (existingProjects.length > 0) return;
 
@@ -143,21 +160,4 @@ export async function seedDatabase() {
   }
 
   console.log("Database seeded successfully (demo@feedbackforge.app / password123)");
-
-  const adminEmail = "ygi.operations@gmail.com";
-  const existingAdmin = await db.select().from(users).where(
-    eq(users.email, adminEmail)
-  );
-  if (existingAdmin.length === 0) {
-    const adminHash = await bcrypt.hash("admin123", 10);
-    await db.insert(users).values({
-      email: adminEmail,
-      password: adminHash,
-      firstName: "Admin",
-      lastName: "User",
-      role: "platform_admin",
-      planType: "lifetime_pro",
-    });
-    console.log(`Admin account created: ${adminEmail}`);
-  }
 }
