@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,6 +94,7 @@ export default function ProjectDetail() {
 }
 
 function ProjectDetailContent() {
+  usePageTitle("Project Details");
   const { toast } = useToast();
   const [, params] = useRoute("/projects/:id");
   const projectId = params?.id;

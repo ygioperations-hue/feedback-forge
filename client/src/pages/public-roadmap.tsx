@@ -1,4 +1,5 @@
 import { useRoute } from "wouter";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ type RoadmapData = {
 };
 
 export default function PublicRoadmap() {
+  usePageTitle("Roadmap");
   const { toast } = useToast();
   const [, params] = useRoute("/roadmap/:slug");
   const slug = params?.slug;

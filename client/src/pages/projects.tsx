@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ export default function Projects() {
 }
 
 function ProjectsContent() {
+  usePageTitle("Projects");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { data: projects, isLoading } = useQuery<Project[]>({

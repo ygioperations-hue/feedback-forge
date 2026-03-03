@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +88,7 @@ type LimitsData = {
 };
 
 export default function Pricing() {
+  usePageTitle("Pricing");
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [ltdCode, setLtdCode] = useState("");

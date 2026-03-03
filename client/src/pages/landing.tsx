@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -131,6 +132,7 @@ const testimonials = [
 ];
 
 export default function Landing() {
+  usePageTitle("");
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

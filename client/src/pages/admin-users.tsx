@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,7 @@ function planLabel(planType: string) {
 }
 
 export default function AdminUsers() {
+  usePageTitle("Admin Users");
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
 

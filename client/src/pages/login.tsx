@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useLocation, Link } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -10,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MessageSquareText, Loader2 } from "lucide-react";
 
 export default function Login() {
+  usePageTitle("Sign In");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [email, setEmail] = useState("");

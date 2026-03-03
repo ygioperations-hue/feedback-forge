@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,7 @@ export default function ResponsesList() {
 }
 
 function ResponsesContent() {
+  usePageTitle("Responses");
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
   });

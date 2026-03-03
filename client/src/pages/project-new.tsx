@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +50,7 @@ type PlanLimits = {
 };
 
 function ProjectNewContent() {
+  usePageTitle("New Project");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [name, setName] = useState("");

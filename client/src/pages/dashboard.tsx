@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +30,7 @@ export default function Dashboard() {
 }
 
 function DashboardContent() {
+  usePageTitle("Dashboard");
   const { toast } = useToast();
   const [aiSummary, setAiSummary] = useState<AISummary | null>(null);
 

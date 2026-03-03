@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,6 +23,7 @@ type LtdCode = {
 };
 
 export default function AdminLtd() {
+  usePageTitle("LTD Codes");
   const { toast } = useToast();
   const [selectedTier, setSelectedTier] = useState<string>("pro");
 

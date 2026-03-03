@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -11,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, User, Lock } from "lucide-react";
 
 export default function Profile() {
+  usePageTitle("Profile");
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
 

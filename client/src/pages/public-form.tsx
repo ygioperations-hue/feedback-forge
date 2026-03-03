@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +43,7 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
 }
 
 export default function PublicForm() {
+  usePageTitle("Feedback Form");
   const { toast } = useToast();
   const [, params] = useRoute("/form/:slug");
   const slug = params?.slug;

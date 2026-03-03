@@ -19,6 +19,9 @@ FeedbackForge is a SaaS feedback collection and management tool with platform ad
 - Test account: test@feedbackforge.app / test1234 (customer, monthly)
 
 ## Recent Changes
+- 2026-03-03: SEO: Added title, meta description, Open Graph, Twitter Card, canonical URL, robots meta, JSON-LD structured data to index.html
+- 2026-03-03: SEO: Added usePageTitle hook with per-page dynamic browser tab titles for all 19 pages
+- 2026-03-03: Made project cards fully clickable (entire card navigates to detail page; View Form and dropdown use stopPropagation)
 - 2026-03-02: Enforced Starter Lifetime 3-project limit on backend (POST /api/projects returns 403 at limit) and frontend (alert + disabled create button)
 - 2026-03-02: Removed plain "lifetime" planType — only lifetime_starter and lifetime_pro exist now
 - 2026-03-02: Removed admin planType change dropdown — admin users page is now read-only for plan display

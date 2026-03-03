@@ -1,4 +1,5 @@
 import { useRoute } from "wouter";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,7 @@ type ChangelogData = {
 };
 
 export default function PublicChangelog() {
+  usePageTitle("Changelog");
   const [, params] = useRoute("/changelog/:slug");
   const slug = params?.slug;
 

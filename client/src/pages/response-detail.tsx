@@ -1,4 +1,5 @@
 import { useRoute, Link } from "wouter";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ export default function ResponseDetailPage() {
 }
 
 function ResponseDetailContent() {
+  usePageTitle("Response Details");
   const [, params] = useRoute("/responses/:id");
   const id = params?.id;
 

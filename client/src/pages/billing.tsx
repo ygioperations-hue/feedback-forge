@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -45,6 +46,7 @@ type PaymentData = {
 };
 
 export default function Billing() {
+  usePageTitle("Billing");
   const { user } = useAuth();
   const { toast } = useToast();
   const [location] = useLocation();
