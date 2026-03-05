@@ -10,38 +10,11 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Check, MessageSquareText, Shield, Zap, Crown, Users, BarChart3, Code, Star, Lock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
+/* Subscription plans hidden for Phase 1 launch — only LTD via Stripe is active
 const subscriptionPlans = [
-  {
-    name: "Monthly",
-    price: "$29",
-    period: "/month",
-    description: "No commitment — cancel anytime",
-    features: [
-      "All features included",
-      "Unlimited projects & responses",
-      "AI insights, roadmap, changelog",
-      "Cancel or switch plans anytime",
-    ],
-    cta: "Get Started",
-    variant: "default" as const,
-    popular: true,
-  },
-  {
-    name: "Yearly",
-    price: "$249",
-    period: "/year",
-    description: "Save $99/yr — best recurring value",
-    features: [
-      "Everything in Monthly",
-      "2 months free ($99 savings)",
-      "Priority support",
-      "Lock in yearly rate",
-    ],
-    cta: "Get Started",
-    variant: "outline" as const,
-    popular: false,
-  },
-];
+  { name: "Monthly", price: "$29", period: "/month", ... },
+  { name: "Yearly", price: "$249", period: "/year", ... },
+]; */
 
 /* ltdTiers kept for reference — UI now shows single $59 Lifetime card via Stripe checkout
 const ltdTiers = [
@@ -205,59 +178,9 @@ export default function Pricing() {
               </CardContent>
             </Card>
 
-            {/* Code redemption hidden — LTD now via Stripe payment. Backend redeem route remains functional. */}
+            {/* Code redemption and subscription plans hidden for Phase 1 launch — only LTD via Stripe is active */}
           </>
         )}
-
-        <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold tracking-tight">Prefer flexibility?</h2>
-          <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
-            Subscribe monthly or yearly. Cancel anytime, no commitments. All features included with every subscription.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12 max-w-3xl mx-auto">
-          {subscriptionPlans.map((plan) => (
-            <Card
-              key={plan.name}
-              className={`relative ${plan.popular && !activated ? "border-primary" : ""}`}
-              data-testid={`card-plan-${plan.name.toLowerCase()}`}
-            >
-              {plan.popular && !activated && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge variant="default" data-testid="badge-popular">Most Popular</Badge>
-                </div>
-              )}
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg">{plan.name}</CardTitle>
-                <p className="text-sm text-muted-foreground">{plan.description}</p>
-                <div className="flex items-baseline gap-1 pt-2">
-                  <span className="text-3xl font-bold">{plan.price}</span>
-                  <span className="text-sm text-muted-foreground">{plan.period}</span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ul className="space-y-2.5">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  variant={plan.variant}
-                  className="w-full"
-                  disabled={activated || checkoutLoading === plan.name.toLowerCase()}
-                  onClick={() => handleCheckout(plan.name)}
-                  data-testid={`button-plan-${plan.name.toLowerCase()}`}
-                >
-                  {activated ? "Active" : checkoutLoading === plan.name.toLowerCase() ? "Redirecting..." : plan.cta}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
 
         <div className="text-center space-y-6 mb-12">
           <h2 className="text-xl font-semibold">Trusted by product teams everywhere</h2>

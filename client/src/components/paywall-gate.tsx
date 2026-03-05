@@ -96,7 +96,7 @@ function PaywallScreen() {
             </Button>
           </a>
           <p className="text-xs text-center text-muted-foreground">
-            Starting at $29/month or grab a Lifetime Deal
+            Get lifetime access for just $59 — one-time payment
           </p>
         </div>
       </div>

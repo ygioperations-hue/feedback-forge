@@ -178,7 +178,7 @@ export default function Billing() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-muted-foreground font-medium">Setting up your subscription...</p>
+        <p className="text-muted-foreground font-medium">Activating your access...</p>
       </div>
     );
   }
@@ -195,7 +195,7 @@ export default function Billing() {
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight" data-testid="text-billing-title">Billing</h1>
-        <p className="text-muted-foreground">Manage your subscription and payment history</p>
+        <p className="text-muted-foreground">Manage your plan and payment history</p>
       </div>
 
       {showSuccess && (
@@ -204,7 +204,7 @@ export default function Billing() {
             <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
             <div>
               <p className="font-medium text-green-700 dark:text-green-400">Payment successful!</p>
-              <p className="text-sm text-muted-foreground">Your subscription is now active. Enjoy all features!</p>
+              <p className="text-sm text-muted-foreground">Your lifetime access is now active. Enjoy all features!</p>
             </div>
           </CardContent>
         </Card>
@@ -221,229 +221,8 @@ export default function Billing() {
           </div>
         </CardHeader>
         <CardContent>
-          {subscription && (subscription.status === "active" || subscription.status === "trialing") ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
-                    <Crown className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-lg" data-testid="text-plan-name">
-                      {subscription.planName} Plan
-                    </p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-plan-price">
-                      {getPlanPrice()}
-                    </p>
-                  </div>
-                </div>
-                <Badge variant={subscription.cancelAtPeriodEnd ? "secondary" : "default"} data-testid="badge-plan-status">
-                  {subscription.cancelAtPeriodEnd ? "Cancelling" : "Active"}
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-muted-foreground">Current period</p>
-                    <p className="font-medium" data-testid="text-period-dates">
-                      {formatDate(subscription.currentPeriodStart)} — {formatDate(subscription.currentPeriodEnd)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {subscription.cancelAtPeriodEnd && (
-                <Card className="border-amber-500/30 bg-amber-500/5" data-testid="card-cancel-notice">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <div className="flex-1">
-                      <p className="font-medium text-amber-700 dark:text-amber-400">Subscription ending soon</p>
-                      <p className="text-sm text-muted-foreground">
-                        Your access will end on {formatDate(subscription.currentPeriodEnd)}. You can reactivate anytime before then.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <div className="flex flex-wrap gap-3 pt-1">
-                {subscription.cancelAtPeriodEnd ? (
-                  <Button
-                    onClick={() => reactivateMutation.mutate()}
-                    disabled={reactivateMutation.isPending}
-                    data-testid="button-reactivate-subscription"
-                  >
-                    {reactivateMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                    )}
-                    Reactivate Subscription
-                  </Button>
-                ) : (
-                  <>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          disabled={switchMutation.isPending}
-                          data-testid="button-switch-plan"
-                        >
-                          {switchMutation.isPending ? (
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          ) : (
-                            <ArrowRightLeft className="w-4 h-4 mr-2" />
-                          )}
-                          Switch to {subscription.interval === "month" ? "Yearly ($249/yr)" : "Monthly ($29/mo)"}
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent data-testid="dialog-switch-confirm">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Switch to {subscription.interval === "month" ? "Yearly" : "Monthly"} plan?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {subscription.interval === "month"
-                              ? "You'll be switched to the Yearly plan ($249/yr). The unused portion of your current monthly billing cycle will be credited toward the yearly charge."
-                              : "You'll be switched to the Monthly plan ($29/mo). The unused portion of your current yearly billing cycle will be credited toward future monthly charges."}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel data-testid="button-switch-dismiss">Keep Current Plan</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => switchMutation.mutate(subscription.interval === "month" ? "yearly" : "monthly")}
-                            data-testid="button-switch-confirm"
-                          >
-                            Yes, Switch Plan
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          disabled={cancelMutation.isPending}
-                          data-testid="button-cancel-subscription"
-                        >
-                          {cancelMutation.isPending ? (
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          ) : (
-                            <XCircle className="w-4 h-4 mr-2" />
-                          )}
-                          Cancel Subscription
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent data-testid="dialog-cancel-confirm">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Cancel your subscription?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Your subscription will remain active until the end of your current billing period on{" "}
-                            <span className="font-medium">{formatDate(subscription.currentPeriodEnd)}</span>.
-                            After that, you'll lose access to all paid features. You can reactivate anytime before the period ends.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel data-testid="button-cancel-dismiss">Keep Subscription</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => cancelMutation.mutate()}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            data-testid="button-cancel-confirm"
-                          >
-                            Yes, Cancel
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </>
-                )}
-
-              </div>
-            </div>
-          ) : subscription && subscription.status === "past_due" ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-500/10">
-                    <AlertTriangle className="w-5 h-5 text-red-500" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-lg" data-testid="text-plan-name">
-                      {subscription.planName} Plan
-                    </p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-plan-price">
-                      {getPlanPrice()}
-                    </p>
-                  </div>
-                </div>
-                <Badge variant="destructive" data-testid="badge-plan-status">Past Due</Badge>
-              </div>
-
-              <Card className="border-red-500/30 bg-red-500/5" data-testid="card-past-due-notice">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <XCircle className="w-5 h-5 text-red-500 shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-medium text-red-700 dark:text-red-400">Payment failed</p>
-                    <p className="text-sm text-muted-foreground">
-                      Your last payment could not be processed. Please update your payment method to continue using all features.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="pt-1">
-                <a href="/#pricing">
-                  <Button data-testid="button-update-payment">
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    Update Payment Method
-                  </Button>
-                </a>
-              </div>
-            </div>
-          ) : subscription && subscription.status === "canceled" ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-muted">
-                    <Crown className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-lg" data-testid="text-plan-name">
-                      {subscription.planName} Plan
-                    </p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-plan-price">
-                      {getPlanPrice()}
-                    </p>
-                  </div>
-                </div>
-                <Badge variant="secondary" data-testid="badge-plan-status">Canceled</Badge>
-              </div>
-
-              <Card className="border-muted bg-muted/30" data-testid="card-canceled-notice">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <XCircle className="w-5 h-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-medium">Subscription canceled</p>
-                    <p className="text-sm text-muted-foreground">
-                      Your subscription has ended. Subscribe again to regain access to all features.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="pt-1">
-                <a href="/#pricing">
-                  <Button data-testid="button-resubscribe">
-                    <Crown className="w-4 h-4 mr-2" />
-                    Subscribe Again
-                  </Button>
-                </a>
-              </div>
-            </div>
-          ) : limits?.plan?.startsWith("lifetime") ? (
+          {/* Subscription management UI hidden for Phase 1 launch — only LTD shown */}
+          {limits?.plan?.startsWith("lifetime") ? (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-500/10">
@@ -474,13 +253,14 @@ export default function Billing() {
             </div>
           ) : (
             <div className="text-center py-4">
-              <p className="text-muted-foreground mb-3">No active subscription</p>
+              <p className="text-muted-foreground mb-3">No active plan</p>
               <a href="/#pricing">
                 <Button data-testid="button-view-plans">
                   <Crown className="w-4 h-4 mr-2" />
-                  View Plans
+                  Get Lifetime Access — $59
                 </Button>
               </a>
+              <p className="text-xs text-muted-foreground mt-2">One-time payment, unlimited access forever</p>
             </div>
           )}
         </CardContent>
