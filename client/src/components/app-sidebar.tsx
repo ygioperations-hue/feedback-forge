@@ -74,8 +74,7 @@ export function AppSidebar() {
               <div className="px-2">
                 <Badge variant="secondary" className="text-xs w-full justify-center" data-testid="badge-sidebar-plan">
                   <Crown className="w-3 h-3 mr-1" />
-                  {user.planType === "lifetime_starter" ? "Starter Lifetime" :
-                   user.planType === "lifetime_pro" ? "Pro Lifetime" :
+                  {user.planType === "lifetime_starter" || user.planType === "lifetime_pro" ? "Lifetime" :
                    user.planType === "monthly" ? "Monthly" :
                    user.planType === "yearly" ? "Yearly" : user.planType}
                 </Badge>

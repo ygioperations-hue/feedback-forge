@@ -451,12 +451,10 @@ export default function Billing() {
                 </div>
                 <div>
                   <p className="font-semibold text-lg" data-testid="text-plan-name">
-                    {limits.plan === "lifetime_starter" ? "Starter Lifetime" : limits.plan === "lifetime_pro" ? "Pro Lifetime" : "Lifetime Deal"}
+                    Lifetime Deal
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {limits.plan === "lifetime_starter"
-                      ? "Up to 3 projects — no recurring charges"
-                      : "Unlimited access forever — no recurring charges"}
+                    Unlimited access forever — no recurring charges
                   </p>
                 </div>
                 <Badge className="ml-auto" data-testid="badge-plan-status">Active</Badge>

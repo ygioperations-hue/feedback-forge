@@ -9,8 +9,17 @@ export async function seedDatabase() {
     await db.insert(plans).values([
       { name: "Monthly", price: 2900, interval: "month" },
       { name: "Yearly", price: 24900, interval: "year" },
+      { name: "Lifetime", price: 5900, interval: "lifetime" },
     ]);
-    console.log("Plans seeded: Monthly ($29/mo), Yearly ($249/yr)");
+    console.log("Plans seeded: Monthly ($29/mo), Yearly ($249/yr), Lifetime ($59)");
+  } else {
+    const hasLifetime = existingPlans.some(p => p.interval === "lifetime");
+    if (!hasLifetime) {
+      await db.insert(plans).values([
+        { name: "Lifetime", price: 5900, interval: "lifetime" },
+      ]);
+      console.log("Lifetime plan seeded ($59)");
+    }
   }
 
   const adminEmail = "ygi.operations@gmail.com";

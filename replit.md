@@ -1,170 +1,33 @@
 # FeedbackForge
 
 ## Overview
-FeedbackForge is a SaaS feedback collection and management tool with platform admin and customer roles. Customers sign up with email/password and subscribe to collect feedback. Platform admins manage users, LTD codes, and view platform stats. Features include customizable feedback forms (rating, text, multiple choice), public form sharing via unique links, embeddable feedback widgets, centralized dashboard, AI-powered insights (OpenAI GPT-4o Mini), public roadmaps with upvoting, product changelogs, Stripe payment integration for subscription plans, and lifetime deal code management.
-
-## Roles
-- **platform_admin**: Full platform access, user management, LTD code management, admin dashboard. Bypasses paywall. Cannot subscribe via Stripe.
-- **customer**: Feedback collection, projects, responses, billing. Requires active plan (monthly/yearly/lifetime_starter/lifetime_pro) to use features.
-
-## Authentication
-- Session-based auth using express-session + connect-pg-simple (PostgreSQL session store)
-- Signup requires: firstName, lastName, email, password (creates customer role, planType=none)
-- Session stores userId; `requireAuth` middleware loads full user onto `req.user`
-- Forgot password feature removed (no email service dependency); columns remain in schema but routes/pages deleted
-- Public pages (forms, roadmaps, changelogs, widget submissions, upvotes) remain unauthenticated
-- Middleware chain: `requireAuth` (loads user) → `requirePlatformAdmin` (role check) or `requireActivePlan` (plan check)
-- Frontend guards: `RequireAuth` (auth gate), `RequireCustomer` (redirects admin to /admin), `RequireAdmin` (redirects customer to /dashboard)
-- Demo account: demo@feedbackforge.app / password123 (platform_admin, lifetime_pro)
-- Test account: test@feedbackforge.app / test1234 (customer, monthly)
-
-## Recent Changes
-- 2026-03-03: SEO: Added title, meta description, Open Graph, Twitter Card, canonical URL, robots meta, JSON-LD structured data to index.html
-- 2026-03-03: SEO: Added usePageTitle hook with per-page dynamic browser tab titles for all 19 pages
-- 2026-03-03: Made project cards fully clickable (entire card navigates to detail page; View Form and dropdown use stopPropagation)
-- 2026-03-02: Enforced Starter Lifetime 3-project limit on backend (POST /api/projects returns 403 at limit) and frontend (alert + disabled create button)
-- 2026-03-02: Removed plain "lifetime" planType — only lifetime_starter and lifetime_pro exist now
-- 2026-03-02: Removed admin planType change dropdown — admin users page is now read-only for plan display
-- 2026-03-02: Removed PATCH /api/admin/users/:id/plan route (unsafe — didn't sync with Stripe)
-- 2026-03-02: Two LTD tiers: Starter ($69, 3 projects) and Pro ($129, unlimited). ltdCodes.tier column, planType values lifetime_starter/lifetime_pro
-- 2026-03-02: Admin LTD page: tier selector (Starter/Pro) for code generation, tier badge in table
-- 2026-03-02: Pricing/landing pages: two LTD tier cards with "Most Popular" badge on Pro, single redemption input
-- 2026-03-02: Billing page: shows Starter/Pro tier name and project usage for lifetime users
-- 2026-03-02: Sidebar: plan badge showing current tier (Starter Lifetime, Pro Lifetime, Monthly, Yearly)
-- 2026-03-02: Webhook handlers protect both lifetime_starter and lifetime_pro from override
-- 2026-02-27: Security hardening: Helmet headers, log sanitization, mandatory Stripe webhook signatures, session secret enforcement
-- 2026-02-27: Removed forgot-password feature entirely (routes, page, login link, storage methods)
-- 2026-02-27: LTD redemption UX: auth cache invalidation + redirect to dashboard after success
-- 2026-02-27: Post-checkout: direct checkout verification via Stripe API (no webhook dependency for initial subscription setup)
-- 2026-02-27: Added POST /api/billing/verify-checkout endpoint for direct session verification
-- 2026-02-27: Checkout success URL now includes session_id for direct verification
-- 2026-02-27: Error states added to admin dashboard, admin users, public roadmap upvote
-- 2026-02-27: Mobile-friendly admin tables with horizontal scroll
-- 2026-02-26: Added platform admin role with full route/UI separation (T001-T011)
-- 2026-02-26: Added `role` (customer/platform_admin) and `planType` (none/monthly/yearly/lifetime_starter/lifetime_pro) to users table
-- 2026-02-26: Refactored requireAuth to load full user onto req.user; added requirePlatformAdmin, requireActivePlan middleware
-- 2026-02-26: isUserActivated() now uses user.planType as primary check (no more LTD/project/subscription queries)
-- 2026-02-26: Stripe webhooks sync user.planType on checkout, subscription update/delete (lifetime never overridden)
-- 2026-02-26: LTD redeem sets user.planType = 'lifetime_starter' or 'lifetime_pro' based on code tier
-- 2026-02-26: Admin API routes: /api/admin/stats, /api/admin/users, /api/admin/ltd/codes (all requirePlatformAdmin)
-- 2026-02-26: Admin pages: /admin (dashboard), /admin/users (read-only plan display + delete), /admin/ltd (LTD codes)
-- 2026-02-26: Sidebar shows different nav for admin vs customer
-- 2026-02-26: Frontend route guards prevent cross-role access
-- 2026-02-26: Removed old /ltd-admin route and page
-- 2026-02-26: Platform admin blocked from Stripe checkout
-- 2026-02-26: Fixed data isolation: answer/question queries now properly scoped (no full-table scans)
-- 2026-02-25: Replaced stripe.* external tables with local plans + subscriptions tables
-- 2026-02-25: Added server/stripe-setup.ts for auto-creating Stripe products/prices on startup
-- 2026-02-25: Removed multi-tenant/organization architecture entirely
-- 2026-02-24: Stripe billing integration (checkout, portal, webhook sync)
-- 2026-02-23: Added landing page at "/" with features, how-it-works, pricing, testimonials, CTA sections
-
-## Tech Stack
-- Frontend: React + Vite + Tailwind + shadcn/ui + wouter routing + TanStack Query
-- Backend: Express.js with PostgreSQL (Drizzle ORM)
-- Database: PostgreSQL (Neon-backed via Replit)
-- Auth: bcryptjs (password hashing), express-session + connect-pg-simple (sessions), crypto (reset tokens)
-- Payments: Stripe (checkout, subscriptions, billing portal, webhooks) — plans/subscriptions stored locally
-- AI: OpenAI GPT-4o Mini (via OPENAI_API_KEY secret)
-
-## Project Architecture
-- `shared/schema.ts` - Drizzle schema: users (role, planType), plans, subscriptions, projects, questions, responses, answers, roadmapItems, changelogItems, ltdCodes
-- `server/auth.ts` - Session middleware, requireAuth (loads user), requirePlatformAdmin, requireActivePlan, password hash/verify, setUserLookup for dependency injection
-- `server/storage.ts` - DatabaseStorage class: all CRUD ops, userId-scoped queries, admin queries (getAllUsers, deleteUser, getAllLtdCodes, getAdminStats)
-- `server/routes.ts` - REST API endpoints: auth, customer (protected), admin (requirePlatformAdmin), public
-- `server/stripeClient.ts` - Stripe client initialization (via Replit connector)
-- `server/stripe-setup.ts` - Auto-creates Stripe product/prices on startup
-- `server/webhookHandlers.ts` - Stripe webhook handlers with planType sync (lifetime protected)
-- `client/public/widget.js` - Hosted feedback widget script
-- `server/seed.ts` - Seeds plans, demo user (admin, lifetime_pro), test user (customer, monthly), sample projects
-- `client/src/lib/auth.tsx` - AuthProvider with user (includes role, planType), RequireAuth gate
-- `client/src/components/app-sidebar.tsx` - Role-based sidebar navigation
-- `client/src/components/paywall-gate.tsx` - PaywallGate (admin bypasses, customer checks planType)
-- `client/src/pages/admin-dashboard.tsx` - Admin stats overview (/admin)
-- `client/src/pages/admin-users.tsx` - User list with read-only plan badges and delete (/admin/users)
-- `client/src/pages/admin-ltd.tsx` - LTD code management (/admin/ltd)
-- `client/src/pages/` - Dashboard, Projects, ProjectNew, ProjectDetail, PublicForm, PublicRoadmap, PublicChangelog, ResponsesList, ResponseDetail, Pricing, Profile, Billing, Login, Signup
-
-## Key API Routes
-
-### Auth (public)
-- POST /api/auth/signup - Create user (customer, planType=none), set session
-- POST /api/auth/login - Verify credentials, set session (returns user with role, planType)
-- POST /api/auth/logout - Destroy session
-- GET /api/auth/me - Return current user info (includes role, planType)
-### Customer (requireAuth, userId-scoped)
-- PATCH /api/auth/profile - Update user first/last name
-- PATCH /api/auth/password - Change password
-- GET /api/projects - List user's projects
-- GET /api/projects/:id - Get project (userId-checked)
-- POST /api/projects - Create project (paywall-checked, enforces 3-project limit for lifetime_starter)
-- PATCH /api/projects/:id/status - Toggle project status
-- DELETE /api/projects/:id - Delete project
-- GET /api/projects/:id/responses - Responses for project
-- GET /api/responses - All user responses
-- GET /api/responses/:id - Single response (userId-checked via project)
-- POST /api/ai/summary - AI summary (paywall-checked)
-- POST /api/roadmap/:slug/items - Create roadmap item
-- POST /api/changelog/:slug/items - Create changelog item
-- POST /api/ltd/redeem - Redeem LTD code (sets planType=lifetime_starter or lifetime_pro based on code tier)
-- GET /api/limits - Plan usage/limits (includes canCreateProject, maxProjects)
-- POST /api/billing/checkout - Stripe checkout (blocked for platform_admin)
-- POST /api/billing/verify-checkout - Direct checkout session verification (creates subscription without webhook)
-- GET /api/billing/status - Subscription status
-- GET /api/billing/history - Payment history
-- POST /api/billing/switch - Switch plans
-- POST /api/billing/cancel - Cancel subscription
-- POST /api/billing/reactivate - Reactivate subscription
-
-### Admin (requireAuth + requirePlatformAdmin, rate-limited)
-- GET /api/admin/stats - Platform stats (users, subscriptions, lifetime, projects, feedback, MRR)
-- GET /api/admin/users - All users with role, planType, projectCount, joinDate (read-only display)
-- DELETE /api/admin/users/:id - Delete user (prevents self-deletion, cascading delete)
-- GET /api/admin/ltd/codes - All LTD codes with redeemer info
-- POST /api/admin/ltd/generate - Generate new LTD code
-- DELETE /api/admin/ltd/codes/:id - Delete unused LTD code
-
-### Public (no auth required)
-- GET /api/forms/:slug - Get form by slug
-- POST /api/forms/:slug/submit - Submit feedback (paywall-checked)
-- POST /api/widget/:slug/submit - Submit widget feedback (paywall-checked)
-- GET /api/roadmap/:slug - Get roadmap items
-- POST /api/roadmap/items/:id/upvote - Upvote roadmap item
-- GET /api/changelog/:slug - Get changelog items
-- GET /api/billing/config - Stripe publishable key
-- GET /api/plans - Available plans
-
-## Database Schema
-- **users**: id, email, password, firstName, lastName, role (customer/platform_admin), planType (none/monthly/yearly/lifetime_starter/lifetime_pro), stripeCustomerId, resetToken, resetTokenExpiry, createdAt
-- **plans**: id, name, price (cents), interval (month/year), stripePriceId, createdAt
-- **subscriptions**: id, userId, planId, stripeSubscriptionId, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt
-- **projects**: id, name, description, status, slug, plan, userId, createdAt
-- **questions**: id, projectId, label, type, required, options, order, source
-- **responses**: id, projectId, respondentName, respondentEmail, submittedAt
-- **answers**: id, responseId, questionId, value
-- **roadmapItems**: id, projectId, title, description, status, upvotes, order, createdAt
-- **changelogItems**: id, projectId, title, description, type, publishedAt
-- **ltdCodes**: id, code, tier (starter/pro), isRedeemed, redeemedAt, userId, createdAt
-
-## Security
-- All customer data queries filter by userId (enforced at both route and storage layer)
-- Admin routes protected by requirePlatformAdmin middleware + rate limiting (100 req/15min)
-- Self-deletion prevented on admin user management
-- Platform admin cannot access Stripe checkout (403)
-- Stripe webhooks never override lifetime planTypes with 'none'
-- Frontend route guards prevent cross-role access
-- Answer/question queries properly scoped (no full-table scans)
-- Starter Lifetime enforced to 3-project limit on both server and client
-
-## Pricing & Paywall (No Free Tier)
-- No free accounts: must be activated via paid plan or LTD code
-- Monthly: $29/month, Yearly: $249/year (Stripe Hosted Checkout)
-- Lifetime Deal Starter: $69, 3 projects max (via redeemable codes, prefix FS-)
-- Lifetime Deal Pro: $129, unlimited projects (via redeemable codes, prefix FP-)
-- isUserActivated() checks user.planType; platform_admin always activated
-- PaywallGate component gates customer pages; admin bypasses
-- Server-side enforcement on create/submit routes
-- Project creation limit enforced server-side for lifetime_starter (403 at 3 projects)
+FeedbackForge is a SaaS platform designed for comprehensive feedback collection and management, targeting businesses that need to gather insights from their customers. It supports two main user roles: `platform_admin` and `customer`. Customers can sign up and subscribe to various plans to create customizable feedback forms (rating, text, multiple choice), share them via unique links, or embed widgets. The platform offers a centralized dashboard, AI-powered insights using OpenAI's GPT-4o Mini, public roadmaps with upvoting functionality, and product changelogs. Platform administrators have full control over user management, lifetime deal (LTD) codes, and platform statistics. The project aims to provide a robust, all-in-one solution for understanding and acting on customer feedback, enhancing product development and customer satisfaction.
 
 ## User Preferences
 - None recorded yet
+
+## System Architecture
+The application uses a modern web stack consisting of React, Vite, Tailwind CSS, shadcn/ui, wouter for routing, and TanStack Query on the frontend. The backend is built with Express.js, using PostgreSQL as the database with Drizzle ORM. Authentication is session-based, utilizing `express-session` and `connect-pg-simple`. User roles (`customer`, `platform_admin`) and plan types (`none`, `monthly`, `yearly`, `lifetime_starter`, `lifetime_pro`) are central to access control, managed through middleware like `requireAuth`, `requirePlatformAdmin`, and `requireActivePlan`.
+
+Key architectural patterns include:
+- **Role-based Access Control (RBAC):** Distinct roles with specific permissions are enforced at both frontend and backend levels.
+- **Modular Backend:** Routes are organized into `auth`, `customer`, `admin`, and `public` categories, with corresponding middleware for access validation.
+- **Database Schema:** A detailed Drizzle schema defines users, plans, subscriptions, projects, feedback components (questions, responses, answers), roadmap items, changelog items, and LTD codes.
+- **Paywall Implementation:** A `PaywallGate` component on the frontend and server-side checks on API routes enforce plan-based feature access. `platform_admin` users bypass the paywall.
+- **Stripe Integration:** Payment processing, including subscriptions and one-time payments, is handled via Stripe. The system stores local plan and subscription data, syncing with Stripe webhooks.
+- **AI Integration:** OpenAI GPT-4o Mini is integrated for AI-powered insights, accessible to users with active plans.
+- **Security:** Measures include session-based authentication, password hashing with bcryptjs, userId-scoped queries to prevent data leakage, and admin route rate limiting.
+
+UI/UX decisions prioritize a clean, modern interface using Tailwind CSS and shadcn/ui components. Frontend routing (`wouter`) ensures a smooth single-page application experience.
+
+## External Dependencies
+- **PostgreSQL:** Primary database, hosted via Neon.
+- **Stripe:** For payment processing (subscriptions, one-time payments), billing portal management, and webhooks.
+- **OpenAI:** Specifically GPT-4o Mini, for AI-powered feedback analysis and insights.
+- **bcryptjs:** For password hashing.
+- **express-session & connect-pg-simple:** For session management and PostgreSQL session store.
+- **Vite:** Frontend build tool.
+- **Tailwind CSS & shadcn/ui:** For styling and UI components.
+- **TanStack Query:** For data fetching and state management on the frontend.
+- **wouter:** For client-side routing.
+- **Drizzle ORM:** For interacting with the PostgreSQL database.

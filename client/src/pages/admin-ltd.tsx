@@ -74,25 +74,7 @@ export default function AdminLtd() {
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-ltd-title">LTD Codes</h1>
           <p className="text-muted-foreground">Generate and manage Lifetime Deal codes</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedTier} onValueChange={setSelectedTier} data-testid="select-tier">
-            <SelectTrigger className="w-[140px]" data-testid="select-tier-trigger">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="starter" data-testid="select-tier-starter">Starter ($69)</SelectItem>
-              <SelectItem value="pro" data-testid="select-tier-pro">Pro ($129)</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            onClick={() => generateMutation.mutate(selectedTier)}
-            disabled={generateMutation.isPending}
-            data-testid="button-generate-code"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {generateMutation.isPending ? "Generating..." : "Generate Code"}
-          </Button>
-        </div>
+        {/* Code generation UI hidden — LTD now handled via Stripe payment. Backend routes remain functional. */}
       </div>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">

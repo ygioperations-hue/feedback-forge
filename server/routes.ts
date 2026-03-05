@@ -732,7 +732,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Platform admins do not need a subscription" });
       }
 
-      const schema = z.object({ plan: z.enum(["monthly", "yearly"]) });
+      const schema = z.object({ plan: z.enum(["monthly", "yearly", "lifetime"]) });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid plan selected" });
@@ -741,12 +741,18 @@ export async function registerRoutes(
       const user = await storage.getUserById(req.session.userId!);
       if (!user) return res.status(401).json({ message: "Not authenticated" });
 
-      const activeSub = await storage.getActiveSubscription(user.id);
-      if (activeSub) {
-        return res.status(400).json({ message: "You already have an active subscription. Please cancel your current plan before subscribing to a new one." });
+      if (parsed.data.plan === "lifetime" && user.planType?.startsWith("lifetime")) {
+        return res.status(400).json({ message: "You already have lifetime access." });
       }
 
-      const interval = parsed.data.plan === "monthly" ? "month" : "year";
+      if (parsed.data.plan !== "lifetime") {
+        const activeSub = await storage.getActiveSubscription(user.id);
+        if (activeSub) {
+          return res.status(400).json({ message: "You already have an active subscription. Please cancel your current plan before subscribing to a new one." });
+        }
+      }
+
+      const interval = parsed.data.plan === "monthly" ? "month" : parsed.data.plan === "yearly" ? "year" : "lifetime";
       const dbPlan = await storage.getPlanByInterval(interval);
       if (!dbPlan || !dbPlan.stripePriceId) {
         return res.status(400).json({ message: "No price found for selected plan. Please try again later." });
@@ -765,12 +771,13 @@ export async function registerRoutes(
         customerId = customer.id;
       }
 
+      const isLifetime = parsed.data.plan === "lifetime";
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
         line_items: [{ price: dbPlan.stripePriceId, quantity: 1 }],
-        mode: 'subscription',
+        mode: isLifetime ? 'payment' : 'subscription',
         success_url: `${baseUrl}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/#pricing`,
         metadata: { userId: user.id, planId: dbPlan.id, plan: parsed.data.plan },
@@ -805,6 +812,29 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Payment not completed" });
       }
 
+      const metadata = session.metadata || {};
+      const planId = metadata.planId;
+      if (!planId) {
+        return res.status(400).json({ message: "No plan information in session" });
+      }
+
+      if (session.mode === "payment" || metadata.plan === "lifetime") {
+        if (!user.planType?.startsWith("lifetime")) {
+          await storage.updateUserPlanType(user.id, "lifetime_pro");
+
+          try {
+            const activeSub = await storage.getActiveSubscription(user.id);
+            if (activeSub && activeSub.stripeSubscriptionId) {
+              await stripe.subscriptions.cancel(activeSub.stripeSubscriptionId);
+              await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, { status: "canceled" });
+            }
+          } catch (cancelErr: any) {
+            console.error("Failed to cancel existing subscription after lifetime purchase:", cancelErr.message);
+          }
+        }
+        return res.json({ message: "Lifetime access activated", status: "active" });
+      }
+
       const stripeSubscriptionId = session.subscription as string;
       if (!stripeSubscriptionId) {
         return res.status(400).json({ message: "No subscription found in session" });
@@ -813,12 +843,6 @@ export async function registerRoutes(
       const existingSub = await storage.getSubscriptionByStripeId(stripeSubscriptionId);
       if (existingSub) {
         return res.json({ message: "Subscription already active", status: "active" });
-      }
-
-      const metadata = session.metadata || {};
-      const planId = metadata.planId;
-      if (!planId) {
-        return res.status(400).json({ message: "No plan information in session" });
       }
 
       let periodStart: Date = new Date();

@@ -39,23 +39,29 @@ export async function ensureStripePrices() {
         active: true,
       });
 
+      const isOneTime = plan.interval === 'lifetime';
       const existingPrice = existingPrices.data.find(
-        p => p.unit_amount === plan.price && p.recurring?.interval === plan.interval
+        p => isOneTime
+          ? (p.unit_amount === plan.price && !p.recurring)
+          : (p.unit_amount === plan.price && p.recurring?.interval === plan.interval)
       );
 
       if (existingPrice) {
         await storage.updatePlanStripePriceId(plan.id, existingPrice.id);
         console.log(`Linked existing Stripe price ${existingPrice.id} to ${plan.name} plan`);
       } else {
-        const price = await stripe.prices.create({
+        const priceParams: any = {
           product: productId,
           unit_amount: plan.price,
           currency: 'usd',
-          recurring: { interval: plan.interval as 'month' | 'year' },
           metadata: { plan: plan.name.toLowerCase() },
-        });
+        };
+        if (!isOneTime) {
+          priceParams.recurring = { interval: plan.interval as 'month' | 'year' };
+        }
+        const price = await stripe.prices.create(priceParams);
         await storage.updatePlanStripePriceId(plan.id, price.id);
-        console.log(`Created Stripe price ${price.id} for ${plan.name} plan ($${plan.price / 100}/${plan.interval})`);
+        console.log(`Created Stripe price ${price.id} for ${plan.name} plan ($${plan.price / 100}${isOneTime ? ' one-time' : '/' + plan.interval})`);
       }
     }
 

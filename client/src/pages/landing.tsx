@@ -138,7 +138,6 @@ export default function Landing() {
   const { toast } = useToast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
-  const [selectedLtdTier, setSelectedLtdTier] = useState<"starter" | "pro">("pro");
   const [ltdCode, setLtdCode] = useState("");
 
   useEffect(() => {
@@ -155,7 +154,7 @@ export default function Landing() {
 
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
-  const handleCheckout = async (plan: "monthly" | "yearly") => {
+  const handleCheckout = async (plan: "monthly" | "yearly" | "lifetime") => {
     if (!isAuthenticated) {
       window.location.href = "/signup";
       return;
@@ -459,29 +458,24 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8">
-            {([
-              {
-                id: "starter" as const,
-                name: "Starter",
-                price: "$69",
-                description: "Great entry point for solo creators",
-                highlights: [
-                  "Up to 3 feedback projects",
-                  "Unlimited responses & submissions",
-                  "Public roadmap & changelog",
-                  "Embeddable feedback widget",
-                  "All future platform updates",
-                  "No recurring fees, ever",
-                ],
-              },
-              {
-                id: "pro" as const,
-                name: "Pro",
-                price: "$129",
-                description: "Everything unlimited, forever",
-                savingsNote: "Saves $219+/yr vs Monthly plan",
-                highlights: [
+          <Card className="max-w-2xl mx-auto mb-8 relative border-amber-500 shadow-md ring-2 ring-amber-500/20" data-testid="card-ltd-landing">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <Badge className="bg-amber-500 hover:bg-amber-600" data-testid="badge-ltd-best-value">Best Value</Badge>
+            </div>
+            <CardContent className="p-6 sm:p-8 space-y-6">
+              <div className="text-center">
+                <h3 className="text-xl font-semibold">Lifetime Access</h3>
+                <p className="text-sm text-muted-foreground mt-1">Everything unlimited, forever — one single payment</p>
+                <div className="flex items-baseline justify-center gap-1 mt-4">
+                  <span className="text-4xl font-bold">$59</span>
+                  <span className="text-muted-foreground">one-time</span>
+                </div>
+                <p className="text-sm text-amber-600 dark:text-amber-400 font-medium mt-2" data-testid="text-ltd-savings">
+                  Saves $289+/yr vs Monthly plan
+                </p>
+              </div>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto">
+                {[
                   "Unlimited projects",
                   "Unlimited responses & submissions",
                   "AI-powered insights (GPT-4o)",
@@ -489,94 +483,29 @@ export default function Landing() {
                   "Embeddable feedback widget",
                   "Priority support & all future updates",
                   "No recurring fees, ever",
-                ],
-              },
-            ]).map((ltd) => {
-              const isSelected = selectedLtdTier === ltd.id;
-              return (
-                <Card
-                  key={ltd.id}
-                  onClick={() => setSelectedLtdTier(ltd.id)}
-                  className={`relative cursor-pointer transition-all ${
-                    isSelected
-                      ? "border-amber-500 shadow-md ring-2 ring-amber-500/20"
-                      : "border-border hover:border-amber-500/40"
-                  }`}
-                  data-testid={`card-ltd-${ltd.id}-landing`}
-                >
-                  {isSelected && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-amber-500 hover:bg-amber-600" data-testid={`badge-ltd-selected-${ltd.id}`}>
-                        {ltd.id === "pro" ? "Best Value" : "Selected"}
-                      </Badge>
-                    </div>
-                  )}
-                  {ltd.id === "pro" && !isSelected && (
-                    <div className="absolute -top-3 right-4">
-                      <Badge variant="secondary" className="text-xs" data-testid="badge-ltd-popular-landing">Most Popular</Badge>
-                    </div>
-                  )}
-                  <CardContent className="p-6 sm:p-8 space-y-6">
-                    <div>
-                      <h3 className="text-xl font-semibold">{ltd.name}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">{ltd.description}</p>
-                      <div className="flex items-baseline gap-1 mt-4">
-                        <span className="text-4xl font-bold">{ltd.price}</span>
-                        <span className="text-muted-foreground">one-time</span>
-                      </div>
-                      {"savingsNote" in ltd && ltd.savingsNote && isSelected && (
-                        <p className="text-sm text-amber-600 dark:text-amber-400 font-medium mt-2" data-testid="text-ltd-savings">
-                          {ltd.savingsNote}
-                        </p>
-                      )}
-                    </div>
-                    <ul className="space-y-3">
-                      {ltd.highlights.map((item, i) => (
-                        <li key={i} className="flex items-start gap-2.5 text-sm">
-                          <Check className={`w-4 h-4 shrink-0 mt-0.5 ${isSelected ? "text-amber-500" : "text-muted-foreground"}`} />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-
-          <Card className="max-w-3xl mx-auto mb-16 border-amber-500/30" data-testid="card-ltd-landing">
-            <CardContent className="p-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10 shrink-0">
-                    <Crown className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Have a Lifetime Deal code?</h3>
-                    <p className="text-sm text-muted-foreground">Redeem your code to activate Starter or Pro access instantly</p>
-                  </div>
-                </div>
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-sm">
+                    <Check className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="text-center">
                 {isAuthenticated ? (
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <Input
-                      placeholder="FS-XXXX or FP-XXXX"
-                      value={ltdCode}
-                      onChange={(e) => setLtdCode(e.target.value)}
-                      className="w-48"
-                      data-testid="input-ltd-code-landing"
-                    />
-                    <Button
-                      onClick={() => redeemMutation.mutate()}
-                      disabled={!ltdCode.trim() || redeemMutation.isPending}
-                      data-testid="button-redeem-ltd-landing"
-                    >
-                      {redeemMutation.isPending ? "Redeeming..." : "Redeem"}
-                    </Button>
-                  </div>
+                  <Button
+                    size="lg"
+                    className="bg-amber-500 hover:bg-amber-600 text-white"
+                    onClick={() => handleCheckout("lifetime")}
+                    disabled={checkoutLoading === "lifetime"}
+                    data-testid="button-ltd-checkout-landing"
+                  >
+                    <Crown className="w-4 h-4 mr-2" />
+                    {checkoutLoading === "lifetime" ? "Redirecting..." : "Get Lifetime Access — $59"}
+                  </Button>
                 ) : (
                   <Link href="/signup">
-                    <Button variant="outline" className="shrink-0" data-testid="button-ltd-signup">
-                      Sign Up to Redeem
+                    <Button size="lg" className="bg-amber-500 hover:bg-amber-600 text-white" data-testid="button-ltd-signup">
+                      Sign Up to Get Started
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
                   </Link>
@@ -584,6 +513,8 @@ export default function Landing() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Code redemption hidden — LTD now via Stripe payment. Backend redeem route remains functional. */}
 
           <div className="text-center mb-8">
             <h3 className="text-2xl font-bold tracking-tight">Prefer flexibility?</h3>

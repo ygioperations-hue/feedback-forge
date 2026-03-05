@@ -71,11 +71,12 @@ export class WebhookHandlers {
     const customerId = data.customer;
     const stripeSubscriptionId = data.subscription;
     const metadata = data.metadata || {};
+    const mode = data.mode;
 
-    console.log(`Checkout completed: customer=${customerId}, subscription=${stripeSubscriptionId}`);
+    console.log(`Checkout completed: customer=${customerId}, subscription=${stripeSubscriptionId}, mode=${mode}`);
 
-    if (!customerId || !stripeSubscriptionId) {
-      console.log('Checkout: Missing customer or subscription ID');
+    if (!customerId) {
+      console.log('Checkout: Missing customer ID');
       return;
     }
 
@@ -88,6 +89,30 @@ export class WebhookHandlers {
     const planId = metadata.planId;
     if (!planId) {
       console.error(`Webhook: No planId in checkout session metadata`);
+      return;
+    }
+
+    if (mode === 'payment' || metadata.plan === 'lifetime') {
+      console.log(`Lifetime payment completed for user ${user.id}`);
+      await storage.updateUserPlanType(user.id, 'lifetime_pro');
+
+      try {
+        const activeSub = await storage.getActiveSubscription(user.id);
+        if (activeSub && activeSub.stripeSubscriptionId) {
+          const stripe = await getUncachableStripeClient();
+          await stripe.subscriptions.cancel(activeSub.stripeSubscriptionId);
+          await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, { status: 'canceled' });
+          console.log(`Canceled existing subscription ${activeSub.stripeSubscriptionId} after lifetime purchase`);
+        }
+      } catch (cancelErr: any) {
+        console.error('Failed to cancel existing subscription after lifetime purchase:', cancelErr.message);
+      }
+
+      return;
+    }
+
+    if (!stripeSubscriptionId) {
+      console.log('Checkout: Missing subscription ID for subscription-mode checkout');
       return;
     }
 
