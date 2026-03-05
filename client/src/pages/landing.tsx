@@ -446,7 +446,7 @@ export default function Landing() {
                   <span className="text-muted-foreground">one-time</span>
                 </div>
                 <p className="text-sm text-amber-600 dark:text-amber-400 font-medium mt-2" data-testid="text-ltd-savings">
-                  Saves $289+/yr vs Monthly plan
+                  One payment. Unlimited access. Forever.
                 </p>
               </div>
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto">
