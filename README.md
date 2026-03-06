@@ -154,7 +154,7 @@ NODE_ENV=development
 | `PORT` | No | Server port (defaults to `5000`) |
 | `NODE_ENV` | No | `development` or `production` |
 
-> **Note on Replit:** When running on Replit, Stripe credentials are managed automatically through Replit's integration/connector system — no manual Stripe keys are needed. For local development outside Replit, you must provide the keys directly in your `.env` file.
+> **On Replit:** Add your Stripe keys via the Secrets panel (Tools → Secrets). They are already configured as environment secrets.
 
 > **Generating a session secret:** You can generate a random secret with:
 > ```bash
@@ -244,9 +244,9 @@ In production, the compiled frontend is served as static files from the Express 
 
 The project is pre-configured for Replit deployment:
 - The `Start application` workflow runs `npm run dev`
-- Stripe keys are managed via Replit's built-in Stripe integration
+- Stripe keys are stored as environment secrets (Tools → Secrets)
 - The PostgreSQL database is provisioned automatically
-- Environment secrets are managed through Replit's Secrets panel
+- All secrets are managed through Replit's Secrets panel
 
 To deploy, use Replit's built-in publish/deploy feature.
 
