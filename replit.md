@@ -24,6 +24,8 @@ FeedbackForge is a SaaS feedback collection and management platform with admin/c
 - Test account: test@feedbackforge.app / test1234 (customer, monthly)
 
 ## Recent Changes
+- 2026-03-06: Removed all Replit-specific dependencies (@replit Vite plugins, stripe-replit-sync) — codebase is now fully portable
+- 2026-03-06: Removed hardcoded replit.app URLs from SEO metadata; updated JSON-LD offers to Phase 1 ($59 LTD only)
 - 2026-03-06: Removed Replit Stripe connector — Stripe now uses direct API keys from env secrets (STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY)
 - 2026-03-05: Phase 1 launch: Hidden subscription plans (Monthly/Yearly) from all frontend pages — only $59 LTD visible
 - 2026-03-05: Simplified billing page — shows lifetime status or CTA to get LTD, no subscription management UI

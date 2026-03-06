@@ -240,15 +240,24 @@ In production, the compiled frontend is served as static files from the Express 
 
 ---
 
-## Deployment on Replit
+## Deployment
 
-The project is pre-configured for Replit deployment:
+The project has no platform-specific dependencies and can be deployed anywhere that supports Node.js and PostgreSQL.
+
+### On Replit
 - The `Start application` workflow runs `npm run dev`
-- Stripe keys are stored as environment secrets (Tools → Secrets)
-- The PostgreSQL database is provisioned automatically
-- All secrets are managed through Replit's Secrets panel
+- Add secrets via Tools → Secrets
+- PostgreSQL is provisioned automatically
 
-To deploy, use Replit's built-in publish/deploy feature.
+### On Other Platforms (Railway, Render, Fly.io, VPS, etc.)
+1. Set all required environment variables (see table above)
+2. Run `npm install` then `npm run build`
+3. Run `npm run db:push` to initialize the database
+4. Start with `npm start`
+5. The server listens on `PORT` (defaults to `5000`) at `0.0.0.0`
+
+### SEO URLs
+Update the canonical URL, Open Graph URL, and JSON-LD URL in `client/index.html` to match your production domain before deploying.
 
 ---
 
