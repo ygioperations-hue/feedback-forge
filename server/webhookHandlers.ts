@@ -1,4 +1,4 @@
-import { getUncachableStripeClient } from './stripeClient';
+import { getStripeClient } from './stripeClient';
 import { storage } from './storage';
 
 function parseStripeDate(value: any): Date | undefined {
@@ -24,7 +24,7 @@ export class WebhookHandlers {
       );
     }
 
-    const stripe = await getUncachableStripeClient();
+    const stripe = getStripeClient();
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     let event: any;
@@ -99,7 +99,7 @@ export class WebhookHandlers {
       try {
         const activeSub = await storage.getActiveSubscription(user.id);
         if (activeSub && activeSub.stripeSubscriptionId) {
-          const stripe = await getUncachableStripeClient();
+          const stripe = getStripeClient();
           await stripe.subscriptions.cancel(activeSub.stripeSubscriptionId);
           await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, { status: 'canceled' });
           console.log(`Canceled existing subscription ${activeSub.stripeSubscriptionId} after lifetime purchase`);
@@ -126,7 +126,7 @@ export class WebhookHandlers {
     let periodEnd: Date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     try {
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
       const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
       const subAny = stripeSub as any;
       const itemData = subAny.items?.data?.[0];

@@ -6,7 +6,7 @@ import { z } from "zod";
 import OpenAI from "openai";
 import rateLimit from "express-rate-limit";
 import { requireAuth, requirePlatformAdmin, requireActivePlan, hashPassword, verifyPassword, setUserLookup } from "./auth";
-import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { getStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function p(val: string | string[]): string {
   return Array.isArray(val) ? val[0] : val;
@@ -718,7 +718,7 @@ export async function registerRoutes(
 
   app.get("/api/billing/config", async (_req, res) => {
     try {
-      const publishableKey = await getStripePublishableKey();
+      const publishableKey = getStripePublishableKey();
       res.json({ publishableKey });
     } catch (err) {
       console.error("Failed to get Stripe config:", err);
@@ -758,7 +758,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No price found for selected plan. Please try again later." });
       }
 
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
 
       let customerId = user.stripeCustomerId;
       if (!customerId) {
@@ -801,7 +801,7 @@ export async function registerRoutes(
       const user = await storage.getUserById(req.session.userId!);
       if (!user) return res.status(401).json({ message: "Not authenticated" });
 
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
       const session = await stripe.checkout.sessions.retrieve(parsed.data.sessionId);
 
       if (session.customer !== user.stripeCustomerId) {
@@ -923,7 +923,7 @@ export async function registerRoutes(
       }
 
       try {
-        const stripe = await getUncachableStripeClient();
+        const stripe = getStripeClient();
         const paymentIntents = await stripe.paymentIntents.list({
           customer: user.stripeCustomerId,
           limit: 50,
@@ -978,7 +978,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Target plan not found" });
       }
 
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
       const stripeSub = await stripe.subscriptions.retrieve(activeSub.stripeSubscriptionId) as any;
       const subscriptionItemId = stripeSub.items?.data?.[0]?.id;
 
@@ -1012,7 +1012,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No active subscription to cancel" });
       }
 
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
       await stripe.subscriptions.update(activeSub.stripeSubscriptionId, {
         cancel_at_period_end: true,
       });
@@ -1042,7 +1042,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Subscription is not scheduled for cancellation" });
       }
 
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
       await stripe.subscriptions.update(activeSub.stripeSubscriptionId, {
         cancel_at_period_end: false,
       });

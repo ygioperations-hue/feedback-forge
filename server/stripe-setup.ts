@@ -1,9 +1,9 @@
 import { storage } from './storage';
-import { getUncachableStripeClient } from './stripeClient';
+import { getStripeClient } from './stripeClient';
 
 export async function ensureStripePrices() {
   try {
-    const stripe = await getUncachableStripeClient();
+    const stripe = getStripeClient();
     const allPlans = await storage.getPlans();
 
     if (allPlans.length === 0) {
