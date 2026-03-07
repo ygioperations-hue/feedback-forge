@@ -78,6 +78,9 @@ export interface IStorage {
   getRoadmapItemsByProject(projectId: string): Promise<RoadmapItem[]>;
   createRoadmapItem(item: InsertRoadmapItem): Promise<RoadmapItem>;
   upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
+  updateRoadmapItem(id: string, data: Partial<InsertRoadmapItem>): Promise<RoadmapItem | undefined>;
+  deleteRoadmapItem(id: string): Promise<boolean>;
+  getRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
   getChangelogByProject(projectId: string): Promise<ChangelogItem[]>;
   createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem>;
   generateLtdCode(userId: string, tier?: string): Promise<LtdCode>;
@@ -376,6 +379,21 @@ export class DatabaseStorage implements IStorage {
   async upvoteRoadmapItem(id: string): Promise<RoadmapItem | undefined> {
     const [updated] = await db.update(roadmapItems).set({ upvotes: sql`${roadmapItems.upvotes} + 1` }).where(eq(roadmapItems.id, id)).returning();
     return updated;
+  }
+
+  async updateRoadmapItem(id: string, data: Partial<InsertRoadmapItem>): Promise<RoadmapItem | undefined> {
+    const [updated] = await db.update(roadmapItems).set(data).where(eq(roadmapItems.id, id)).returning();
+    return updated;
+  }
+
+  async deleteRoadmapItem(id: string): Promise<boolean> {
+    const result = await db.delete(roadmapItems).where(eq(roadmapItems.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getRoadmapItem(id: string): Promise<RoadmapItem | undefined> {
+    const [item] = await db.select().from(roadmapItems).where(eq(roadmapItems.id, id));
+    return item;
   }
 
   async getChangelogByProject(projectId: string): Promise<ChangelogItem[]> {

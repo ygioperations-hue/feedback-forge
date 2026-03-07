@@ -598,6 +598,53 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/projects/:id/roadmap", requireAuth, async (req: any, res) => {
+    try {
+      const project = await storage.getProject(p(req.params.id));
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      const items = await storage.getRoadmapItemsByProject(project.id);
+      res.json(items);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch roadmap items" });
+    }
+  });
+
+  app.patch("/api/roadmap/items/:id", requireAuth, async (req: any, res) => {
+    try {
+      const item = await storage.getRoadmapItem(p(req.params.id));
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      const project = await storage.getProject(item.projectId);
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      const parsed = insertRoadmapItemSchema.pick({ title: true, description: true, status: true, order: true }).partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+      const updated = await storage.updateRoadmapItem(item.id, parsed.data);
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update roadmap item" });
+    }
+  });
+
+  app.delete("/api/roadmap/items/:id", requireAuth, async (req: any, res) => {
+    try {
+      const item = await storage.getRoadmapItem(p(req.params.id));
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      const project = await storage.getProject(item.projectId);
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      await storage.deleteRoadmapItem(item.id);
+      res.json({ message: "Item deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete roadmap item" });
+    }
+  });
+
   app.post("/api/ai/summary", requireAuth, aiLimiter, async (req, res) => {
     try {
       const uid = req.session.userId!;

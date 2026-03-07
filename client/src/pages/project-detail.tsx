@@ -7,11 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Copy, ExternalLink, Star, MessageSquareText, ListChecks, Code, Check, Map, FileText, Globe, EyeOff } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Copy, ExternalLink, Star, MessageSquareText, ListChecks, Code, Check, Map, FileText, Globe, EyeOff, Plus, Pencil, Trash2, ThumbsUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { PaywallGate } from "@/components/paywall-gate";
-import type { ProjectWithQuestions, ResponseWithAnswers, Question } from "@shared/schema";
+import type { ProjectWithQuestions, ResponseWithAnswers, Question, RoadmapItem } from "@shared/schema";
 
 function RatingDisplay({ value }: { value: number }) {
   return (
@@ -284,6 +289,10 @@ function ProjectDetailContent() {
             <Code className="w-3.5 h-3.5 mr-1.5" />
             Install Widget
           </TabsTrigger>
+          <TabsTrigger value="roadmap" data-testid="tab-roadmap">
+            <Map className="w-3.5 h-3.5 mr-1.5" />
+            Roadmap
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="responses" className="mt-4">
           {loadingResponses ? (
@@ -354,7 +363,264 @@ function ProjectDetailContent() {
         <TabsContent value="widget" className="mt-4">
           <WidgetSnippet slug={project.slug} />
         </TabsContent>
+        <TabsContent value="roadmap" className="mt-4">
+          <RoadmapManager projectId={project.id} slug={project.slug} />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  planned: "Planned",
+  in_progress: "In Progress",
+  under_review: "Under Review",
+  completed: "Completed",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  planned: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  in_progress: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  under_review: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+};
+
+function RoadmapManager({ projectId, slug }: { projectId: string; slug: string }) {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<RoadmapItem | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ title: "", description: "", status: "planned", order: 0 });
+
+  const { data: items, isLoading } = useQuery<RoadmapItem[]>({
+    queryKey: ["/api/projects", projectId, "roadmap"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      await apiRequest("POST", `/api/roadmap/${slug}/items`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "roadmap"] });
+      toast({ title: "Roadmap item created" });
+      closeDialog();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to create item", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+      await apiRequest("PATCH", `/api/roadmap/items/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "roadmap"] });
+      toast({ title: "Roadmap item updated" });
+      closeDialog();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update item", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/roadmap/items/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "roadmap"] });
+      toast({ title: "Roadmap item deleted" });
+      setDeleteId(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete item", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const openCreate = () => {
+    setEditingItem(null);
+    setFormData({ title: "", description: "", status: "planned", order: (items?.length ?? 0) + 1 });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (item: RoadmapItem) => {
+    setEditingItem(item);
+    setFormData({ title: item.title, description: item.description || "", status: item.status, order: item.order });
+    setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingItem(null);
+    setFormData({ title: "", description: "", status: "planned", order: 0 });
+  };
+
+  const handleSubmit = () => {
+    if (!formData.title.trim()) {
+      toast({ title: "Title is required", variant: "destructive" });
+      return;
+    }
+    if (editingItem) {
+      updateMutation.mutate({ id: editingItem.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
+      </div>
+    );
+  }
+
+  const grouped = (items || []).reduce((acc, item) => {
+    if (!acc[item.status]) acc[item.status] = [];
+    acc[item.status].push(item);
+    return acc;
+  }, {} as Record<string, RoadmapItem[]>);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Manage your product roadmap. Items are visible on your{" "}
+          <a href={`/roadmap/${slug}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+            public roadmap page
+          </a>.
+        </p>
+        <Button size="sm" onClick={openCreate} data-testid="button-add-roadmap-item">
+          <Plus className="w-3.5 h-3.5 mr-1.5" />
+          Add Item
+        </Button>
+      </div>
+
+      {items && items.length > 0 ? (
+        <div className="space-y-6">
+          {["in_progress", "planned", "under_review", "completed"].map((status) => {
+            const statusItems = grouped[status];
+            if (!statusItems || statusItems.length === 0) return null;
+            return (
+              <div key={status}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge className={`text-xs ${STATUS_COLORS[status]}`} data-testid={`badge-status-group-${status}`}>
+                    {STATUS_LABELS[status]}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">{statusItems.length} item{statusItems.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div className="space-y-2">
+                  {statusItems.sort((a, b) => a.order - b.order).map((item) => (
+                    <Card key={item.id} data-testid={`card-roadmap-item-${item.id}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium" data-testid={`text-roadmap-title-${item.id}`}>{item.title}</p>
+                            {item.description && (
+                              <p className="text-xs text-muted-foreground mt-1">{item.description}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <ThumbsUp className="w-3 h-3" />
+                                {item.upvotes} upvote{item.upvotes !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)} data-testid={`button-edit-roadmap-${item.id}`}>
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteId(item.id)} data-testid={`button-delete-roadmap-${item.id}`}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Map className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+            <p className="text-sm text-muted-foreground">No roadmap items yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Add items to share your product roadmap with customers</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent data-testid="dialog-roadmap-item">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? "Edit Roadmap Item" : "Add Roadmap Item"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="roadmap-title">Title</Label>
+              <Input
+                id="roadmap-title"
+                placeholder="e.g., Dark mode support"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                data-testid="input-roadmap-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="roadmap-description">Description (optional)</Label>
+              <Textarea
+                id="roadmap-description"
+                placeholder="Describe this roadmap item..."
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+                data-testid="input-roadmap-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="roadmap-status">Status</Label>
+              <Select value={formData.status} onValueChange={(val) => setFormData({ ...formData, status: val })}>
+                <SelectTrigger data-testid="select-roadmap-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="planned">Planned</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="under_review">Under Review</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-roadmap">Cancel</Button>
+            <Button onClick={handleSubmit} disabled={isPending} data-testid="button-save-roadmap">
+              {isPending ? "Saving..." : editingItem ? "Save Changes" : "Add Item"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+        <DialogContent data-testid="dialog-delete-roadmap">
+          <DialogHeader>
+            <DialogTitle>Delete Roadmap Item</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete this roadmap item? This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)} data-testid="button-cancel-delete-roadmap">Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending} data-testid="button-confirm-delete-roadmap">
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
