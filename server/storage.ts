@@ -83,6 +83,9 @@ export interface IStorage {
   getRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
   getChangelogByProject(projectId: string): Promise<ChangelogItem[]>;
   createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem>;
+  getChangelogItem(id: string): Promise<ChangelogItem | undefined>;
+  updateChangelogItem(id: string, data: Partial<InsertChangelogItem>): Promise<ChangelogItem | undefined>;
+  deleteChangelogItem(id: string): Promise<boolean>;
   generateLtdCode(userId: string, tier?: string): Promise<LtdCode>;
   getLtdCodes(userId: string): Promise<LtdCode[]>;
   redeemLtdCode(code: string, userId: string): Promise<LtdCode | null>;
@@ -403,6 +406,21 @@ export class DatabaseStorage implements IStorage {
   async createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem> {
     const [created] = await db.insert(changelogItems).values(item).returning();
     return created;
+  }
+
+  async getChangelogItem(id: string): Promise<ChangelogItem | undefined> {
+    const [item] = await db.select().from(changelogItems).where(eq(changelogItems.id, id));
+    return item;
+  }
+
+  async updateChangelogItem(id: string, data: Partial<InsertChangelogItem>): Promise<ChangelogItem | undefined> {
+    const [updated] = await db.update(changelogItems).set(data).where(eq(changelogItems.id, id)).returning();
+    return updated;
+  }
+
+  async deleteChangelogItem(id: string): Promise<boolean> {
+    const result = await db.delete(changelogItems).where(eq(changelogItems.id, id)).returning();
+    return result.length > 0;
   }
 
   async generateLtdCode(userId: string, tier: string = "pro"): Promise<LtdCode> {

@@ -749,6 +749,53 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/projects/:id/changelog", requireAuth, async (req: any, res) => {
+    try {
+      const project = await storage.getProject(p(req.params.id));
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      const items = await storage.getChangelogByProject(project.id);
+      res.json(items);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch changelog items" });
+    }
+  });
+
+  app.patch("/api/changelog/items/:id", requireAuth, async (req: any, res) => {
+    try {
+      const item = await storage.getChangelogItem(p(req.params.id));
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      const project = await storage.getProject(item.projectId);
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      const parsed = insertChangelogItemSchema.pick({ title: true, description: true, type: true }).partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+      const updated = await storage.updateChangelogItem(item.id, parsed.data);
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update changelog item" });
+    }
+  });
+
+  app.delete("/api/changelog/items/:id", requireAuth, async (req: any, res) => {
+    try {
+      const item = await storage.getChangelogItem(p(req.params.id));
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      const project = await storage.getProject(item.projectId);
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      await storage.deleteChangelogItem(item.id);
+      res.json({ message: "Item deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete changelog item" });
+    }
+  });
+
   app.get("/api/plans", async (_req, res) => {
     try {
       const allPlans = await storage.getPlans();

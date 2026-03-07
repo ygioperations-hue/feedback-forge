@@ -16,7 +16,7 @@ import { ArrowLeft, Copy, ExternalLink, Star, MessageSquareText, ListChecks, Cod
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { PaywallGate } from "@/components/paywall-gate";
-import type { ProjectWithQuestions, ResponseWithAnswers, Question, RoadmapItem } from "@shared/schema";
+import type { ProjectWithQuestions, ResponseWithAnswers, Question, RoadmapItem, ChangelogItem } from "@shared/schema";
 
 function RatingDisplay({ value }: { value: number }) {
   return (
@@ -293,6 +293,10 @@ function ProjectDetailContent() {
             <Map className="w-3.5 h-3.5 mr-1.5" />
             Roadmap
           </TabsTrigger>
+          <TabsTrigger value="changelog" data-testid="tab-changelog">
+            <FileText className="w-3.5 h-3.5 mr-1.5" />
+            Changelog
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="responses" className="mt-4">
           {loadingResponses ? (
@@ -365,6 +369,9 @@ function ProjectDetailContent() {
         </TabsContent>
         <TabsContent value="roadmap" className="mt-4">
           <RoadmapManager projectId={project.id} slug={project.slug} />
+        </TabsContent>
+        <TabsContent value="changelog" className="mt-4">
+          <ChangelogManager projectId={project.id} slug={project.slug} />
         </TabsContent>
       </Tabs>
     </div>
@@ -616,6 +623,246 @@ function RoadmapManager({ projectId, slug }: { projectId: string; slug: string }
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteId(null)} data-testid="button-cancel-delete-roadmap">Cancel</Button>
             <Button variant="destructive" onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending} data-testid="button-confirm-delete-roadmap">
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  improvement: "Improvement",
+  new_feature: "New Feature",
+  bug_fix: "Bug Fix",
+  update: "Update",
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  improvement: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  new_feature: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  bug_fix: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  update: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300",
+};
+
+function ChangelogManager({ projectId, slug }: { projectId: string; slug: string }) {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ChangelogItem | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ title: "", description: "", type: "improvement" });
+
+  const { data: items, isLoading } = useQuery<ChangelogItem[]>({
+    queryKey: ["/api/projects", projectId, "changelog"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      await apiRequest("POST", `/api/changelog/${slug}/items`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "changelog"] });
+      toast({ title: "Changelog entry created" });
+      closeDialog();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to create entry", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+      await apiRequest("PATCH", `/api/changelog/items/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "changelog"] });
+      toast({ title: "Changelog entry updated" });
+      closeDialog();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update entry", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/changelog/items/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "changelog"] });
+      toast({ title: "Changelog entry deleted" });
+      setDeleteId(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete entry", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const openCreate = () => {
+    setEditingItem(null);
+    setFormData({ title: "", description: "", type: "improvement" });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (item: ChangelogItem) => {
+    setEditingItem(item);
+    setFormData({ title: item.title, description: item.description || "", type: item.type });
+    setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingItem(null);
+    setFormData({ title: "", description: "", type: "improvement" });
+  };
+
+  const handleSubmit = () => {
+    if (!formData.title.trim()) {
+      toast({ title: "Title is required", variant: "destructive" });
+      return;
+    }
+    if (editingItem) {
+      updateMutation.mutate({ id: editingItem.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
+      </div>
+    );
+  }
+
+  const sortedItems = [...(items || [])].sort((a, b) =>
+    new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Keep customers informed about updates via your{" "}
+          <a href={`/changelog/${slug}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+            public changelog
+          </a>.
+        </p>
+        <Button size="sm" onClick={openCreate} data-testid="button-add-changelog-entry">
+          <Plus className="w-3.5 h-3.5 mr-1.5" />
+          Add Entry
+        </Button>
+      </div>
+
+      {sortedItems.length > 0 ? (
+        <div className="space-y-3">
+          {sortedItems.map((item) => (
+            <Card key={item.id} data-testid={`card-changelog-item-${item.id}`}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium" data-testid={`text-changelog-title-${item.id}`}>{item.title}</p>
+                      <Badge className={`text-xs ${TYPE_COLORS[item.type] || TYPE_COLORS.update}`}>
+                        {TYPE_LABELS[item.type] || item.type}
+                      </Badge>
+                    </div>
+                    {item.description && (
+                      <p className="text-xs text-muted-foreground mt-1">{item.description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {new Date(item.publishedAt).toLocaleDateString("en-US", {
+                        month: "short", day: "numeric", year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)} data-testid={`button-edit-changelog-${item.id}`}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteId(item.id)} data-testid={`button-delete-changelog-${item.id}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <FileText className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+            <p className="text-sm text-muted-foreground">No changelog entries yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Add entries to share product updates with your customers</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent data-testid="dialog-changelog-item">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? "Edit Changelog Entry" : "Add Changelog Entry"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="changelog-title">Title</Label>
+              <Input
+                id="changelog-title"
+                placeholder="e.g., Improved dashboard performance"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                data-testid="input-changelog-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="changelog-description">Description (optional)</Label>
+              <Textarea
+                id="changelog-description"
+                placeholder="Describe this update..."
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+                data-testid="input-changelog-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="changelog-type">Type</Label>
+              <Select value={formData.type} onValueChange={(val) => setFormData({ ...formData, type: val })}>
+                <SelectTrigger data-testid="select-changelog-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="improvement">Improvement</SelectItem>
+                  <SelectItem value="new_feature">New Feature</SelectItem>
+                  <SelectItem value="bug_fix">Bug Fix</SelectItem>
+                  <SelectItem value="update">Update</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-changelog">Cancel</Button>
+            <Button onClick={handleSubmit} disabled={isPending} data-testid="button-save-changelog">
+              {isPending ? "Saving..." : editingItem ? "Save Changes" : "Add Entry"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+        <DialogContent data-testid="dialog-delete-changelog">
+          <DialogHeader>
+            <DialogTitle>Delete Changelog Entry</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete this changelog entry? This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)} data-testid="button-cancel-delete-changelog">Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending} data-testid="button-confirm-delete-changelog">
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
