@@ -1,3 +1,4 @@
+import "./env";
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
@@ -108,7 +109,11 @@ app.use((req, res, next) => {
   const { seedDatabase } = await import("./seed");
   await seedDatabase().catch((err) => console.error("Seed error:", err));
 
-  await ensureStripePrices();
+  if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY) {
+    await ensureStripePrices();
+  } else {
+    console.log("Skipping Stripe price sync: Stripe keys are not configured");
+  }
 
   await registerRoutes(httpServer, app);
 
