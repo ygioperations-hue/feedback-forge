@@ -81,6 +81,10 @@ export interface IStorage {
   updateRoadmapItem(id: string, data: Partial<InsertRoadmapItem>): Promise<RoadmapItem | undefined>;
   deleteRoadmapItem(id: string): Promise<boolean>;
   getRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
+  getQuestion(id: string): Promise<Question | undefined>;
+  updateQuestion(id: string, data: Partial<Pick<InsertQuestion, 'label' | 'options' | 'required' | 'order'>>): Promise<Question | undefined>;
+  deleteQuestion(id: string): Promise<boolean>;
+  addQuestionToProject(projectId: string, question: Omit<InsertQuestion, 'projectId'>): Promise<Question>;
   getChangelogByProject(projectId: string): Promise<ChangelogItem[]>;
   createChangelogItem(item: InsertChangelogItem): Promise<ChangelogItem>;
   getChangelogItem(id: string): Promise<ChangelogItem | undefined>;
@@ -397,6 +401,26 @@ export class DatabaseStorage implements IStorage {
   async getRoadmapItem(id: string): Promise<RoadmapItem | undefined> {
     const [item] = await db.select().from(roadmapItems).where(eq(roadmapItems.id, id));
     return item;
+  }
+
+  async getQuestion(id: string): Promise<Question | undefined> {
+    const [item] = await db.select().from(questions).where(eq(questions.id, id));
+    return item;
+  }
+
+  async updateQuestion(id: string, data: Partial<Pick<InsertQuestion, 'label' | 'options' | 'required' | 'order'>>): Promise<Question | undefined> {
+    const [updated] = await db.update(questions).set(data).where(eq(questions.id, id)).returning();
+    return updated;
+  }
+
+  async deleteQuestion(id: string): Promise<boolean> {
+    const result = await db.delete(questions).where(eq(questions.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async addQuestionToProject(projectId: string, question: Omit<InsertQuestion, 'projectId'>): Promise<Question> {
+    const [created] = await db.insert(questions).values({ ...question, projectId }).returning();
+    return created;
   }
 
   async getChangelogByProject(projectId: string): Promise<ChangelogItem[]> {

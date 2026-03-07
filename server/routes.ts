@@ -404,6 +404,80 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/projects/:id/questions", requireAuth, async (req, res) => {
+    try {
+      const project = await storage.getProject(p(req.params.id));
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      const schema = z.object({
+        label: z.string().min(1).max(500),
+        type: z.enum(["rating", "text", "multiple_choice"]),
+        required: z.boolean().default(true),
+        options: z.array(z.string().max(500)).max(50).optional().default([]),
+        order: z.number().int().min(0).default(0),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid question data", errors: parsed.error.flatten() });
+      }
+      const question = await storage.addQuestionToProject(p(req.params.id), parsed.data);
+      res.status(201).json(question);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to add question" });
+    }
+  });
+
+  app.patch("/api/questions/:id", requireAuth, async (req, res) => {
+    try {
+      const question = await storage.getQuestion(p(req.params.id));
+      if (!question) {
+        return res.status(404).json({ message: "Question not found" });
+      }
+      if (question.source === "widget") {
+        return res.status(403).json({ message: "Widget questions cannot be edited" });
+      }
+      const project = await storage.getProject(question.projectId);
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Question not found" });
+      }
+      const schema = z.object({
+        label: z.string().min(1).max(500).optional(),
+        required: z.boolean().optional(),
+        options: z.array(z.string().max(500)).max(50).optional(),
+        order: z.number().int().min(0).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid update data", errors: parsed.error.flatten() });
+      }
+      const updated = await storage.updateQuestion(p(req.params.id), parsed.data);
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update question" });
+    }
+  });
+
+  app.delete("/api/questions/:id", requireAuth, async (req, res) => {
+    try {
+      const question = await storage.getQuestion(p(req.params.id));
+      if (!question) {
+        return res.status(404).json({ message: "Question not found" });
+      }
+      if (question.source === "widget") {
+        return res.status(403).json({ message: "Widget questions cannot be deleted" });
+      }
+      const project = await storage.getProject(question.projectId);
+      if (!project || project.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Question not found" });
+      }
+      await storage.deleteQuestion(p(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete question" });
+    }
+  });
+
   app.get("/api/projects/:id/responses", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(p(req.params.id));

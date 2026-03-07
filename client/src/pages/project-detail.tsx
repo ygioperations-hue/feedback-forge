@@ -320,49 +320,7 @@ function ProjectDetailContent() {
           )}
         </TabsContent>
         <TabsContent value="questions" className="mt-4">
-          {project.questions && project.questions.length > 0 ? (
-            <div className="space-y-2">
-              {project.questions
-                .sort((a, b) => a.order - b.order)
-                .map((question, index) => (
-                  <Card key={question.id} data-testid={`card-question-${question.id}`}>
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <span className="flex items-center justify-center w-7 h-7 rounded-md bg-muted text-xs font-medium shrink-0">
-                        {index + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{question.label}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="secondary" className="text-xs">
-                            <QuestionTypeIcon type={question.type} />
-                            <span className="ml-1">{question.type.replace("_", " ")}</span>
-                          </Badge>
-                          {question.required && (
-                            <span className="text-xs text-muted-foreground">Required</span>
-                          )}
-                        </div>
-                        {question.options && question.options.length > 0 && (
-                          <div className="flex items-center gap-1 mt-2 flex-wrap">
-                            {question.options.map((opt, i) => (
-                              <Badge key={i} variant="outline" className="text-xs">
-                                {opt}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <ListChecks className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground">No questions configured</p>
-              </CardContent>
-            </Card>
-          )}
+          <QuestionsManager projectId={project.id} questions={project.questions || []} />
         </TabsContent>
         <TabsContent value="widget" className="mt-4">
           <WidgetSnippet slug={project.slug} />
@@ -391,6 +349,279 @@ const STATUS_COLORS: Record<string, string> = {
   under_review: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
   completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
 };
+
+function QuestionsManager({ projectId, questions }: { projectId: string; questions: Question[] }) {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Question | null>(null);
+  const [label, setLabel] = useState("");
+  const [type, setType] = useState<string>("text");
+  const [required, setRequired] = useState(true);
+  const [options, setOptions] = useState<string[]>([]);
+  const [newOption, setNewOption] = useState("");
+
+  const resetForm = () => {
+    setLabel("");
+    setType("text");
+    setRequired(true);
+    setOptions([]);
+    setNewOption("");
+    setEditingQuestion(null);
+  };
+
+  const openAddDialog = () => {
+    resetForm();
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (q: Question) => {
+    setEditingQuestion(q);
+    setLabel(q.label);
+    setType(q.type);
+    setRequired(q.required);
+    setOptions(q.options || []);
+    setNewOption("");
+    setDialogOpen(true);
+  };
+
+  const addMutation = useMutation({
+    mutationFn: async (data: { label: string; type: string; required: boolean; options: string[]; order: number }) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/questions`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      toast({ title: "Question added" });
+      setDialogOpen(false);
+      resetForm();
+    },
+    onError: () => toast({ title: "Failed to add question", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { label?: string; required?: boolean; options?: string[] } }) => {
+      const res = await apiRequest("PATCH", `/api/questions/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      toast({ title: "Question updated" });
+      setDialogOpen(false);
+      resetForm();
+    },
+    onError: () => toast({ title: "Failed to update question", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/questions/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      toast({ title: "Question deleted" });
+      setDeleteTarget(null);
+    },
+    onError: () => toast({ title: "Failed to delete question", variant: "destructive" }),
+  });
+
+  const handleSave = () => {
+    if (!label.trim()) return;
+    if (editingQuestion) {
+      updateMutation.mutate({
+        id: editingQuestion.id,
+        data: { label: label.trim(), required, options: type === "multiple_choice" ? options : [] },
+      });
+    } else {
+      const maxOrder = questions.length > 0 ? Math.max(...questions.map((q) => q.order)) + 1 : 0;
+      addMutation.mutate({
+        label: label.trim(),
+        type,
+        required,
+        options: type === "multiple_choice" ? options : [],
+        order: maxOrder,
+      });
+    }
+  };
+
+  const addOption = () => {
+    if (newOption.trim() && !options.includes(newOption.trim())) {
+      setOptions([...options, newOption.trim()]);
+      setNewOption("");
+    }
+  };
+
+  const removeOption = (index: number) => {
+    setOptions(options.filter((_, i) => i !== index));
+  };
+
+  const sorted = [...questions].sort((a, b) => a.order - b.order);
+  const formQuestions = sorted.filter((q) => q.source !== "widget");
+  const widgetQuestions = sorted.filter((q) => q.source === "widget");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button size="sm" onClick={openAddDialog} data-testid="button-add-question">
+          <Plus className="w-4 h-4 mr-1" /> Add Question
+        </Button>
+      </div>
+
+      {formQuestions.length > 0 && (
+        <div className="space-y-2">
+          {formQuestions.map((question, index) => (
+            <Card key={question.id} data-testid={`card-question-${question.id}`}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-md bg-muted text-xs font-medium shrink-0">
+                  {index + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{question.label}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="secondary" className="text-xs">
+                      <QuestionTypeIcon type={question.type} />
+                      <span className="ml-1">{question.type.replace("_", " ")}</span>
+                    </Badge>
+                    {question.required && (
+                      <span className="text-xs text-muted-foreground">Required</span>
+                    )}
+                  </div>
+                  {question.options && question.options.length > 0 && (
+                    <div className="flex items-center gap-1 mt-2 flex-wrap">
+                      {question.options.map((opt, i) => (
+                        <Badge key={i} variant="outline" className="text-xs">{opt}</Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(question)} data-testid={`button-edit-question-${question.id}`}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(question)} data-testid={`button-delete-question-${question.id}`}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {widgetQuestions.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Widget Questions</p>
+          {widgetQuestions.map((question) => (
+            <Card key={question.id} data-testid={`card-question-${question.id}`}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{question.label}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="secondary" className="text-xs">
+                      <QuestionTypeIcon type={question.type} />
+                      <span className="ml-1">{question.type.replace("_", " ")}</span>
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">Widget</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {formQuestions.length === 0 && widgetQuestions.length === 0 && (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <ListChecks className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+            <p className="text-sm text-muted-foreground">No questions configured</p>
+            <p className="text-xs text-muted-foreground mt-1">Add questions to start collecting feedback</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { setDialogOpen(false); resetForm(); } else { setDialogOpen(true); } }} data-testid="dialog-question">
+        <DialogContent data-testid="dialog-question">
+          <DialogHeader>
+            <DialogTitle>{editingQuestion ? "Edit Question" : "Add Question"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="question-label">Label</Label>
+              <Input id="question-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Enter question text" data-testid="input-question-label" />
+            </div>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              {editingQuestion ? (
+                <Input value={type.replace("_", " ")} disabled className="capitalize" data-testid="input-question-type-disabled" />
+              ) : (
+                <Select value={type} onValueChange={setType} data-testid="select-question-type">
+                  <SelectTrigger data-testid="select-question-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="rating">Rating</SelectItem>
+                    <SelectItem value="multiple_choice">Multiple Choice</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="question-required" checked={required} onChange={(e) => setRequired(e.target.checked)} className="rounded border-gray-300" data-testid="checkbox-question-required" />
+              <Label htmlFor="question-required" className="text-sm font-normal">Required</Label>
+            </div>
+            {type === "multiple_choice" && (
+              <div className="space-y-2">
+                <Label>Options</Label>
+                {options.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {options.map((opt, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs gap-1">
+                        {opt}
+                        <button onClick={() => removeOption(i)} className="ml-1 hover:text-destructive" data-testid={`button-remove-option-${i}`}>×</button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input value={newOption} onChange={(e) => setNewOption(e.target.value)} placeholder="Add option" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOption(); } }} data-testid="input-question-option" />
+                  <Button type="button" variant="outline" size="sm" onClick={addOption} data-testid="button-add-option">Add</Button>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>Cancel</Button>
+            <Button onClick={handleSave} disabled={!label.trim() || addMutation.isPending || updateMutation.isPending} data-testid="button-save-question">
+              {addMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }} data-testid="dialog-delete-question">
+        <DialogContent data-testid="dialog-delete-question">
+          <DialogHeader>
+            <DialogTitle>Delete Question</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete "<strong>{deleteTarget?.label}</strong>"?
+          </p>
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            Existing responses for this question will no longer be linked to it.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} disabled={deleteMutation.isPending} data-testid="button-confirm-delete-question">
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
 function RoadmapManager({ projectId, slug }: { projectId: string; slug: string }) {
   const { toast } = useToast();
