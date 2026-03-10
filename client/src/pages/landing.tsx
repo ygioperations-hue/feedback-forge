@@ -32,6 +32,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import avatar1 from "@assets/stock_images/testimonial_avatars_1.jpg";
+import avatar2 from "@assets/stock_images/avatar_marcus.png";
+import avatar3 from "@assets/stock_images/testimonial_avatars_3.jpg";
+import avatar4 from "@assets/stock_images/testimonial_avatars_4.jpg";
+import avatar5 from "@assets/stock_images/testimonial_avatars_5.jpg";
+import avatar6 from "@assets/stock_images/testimonial_avatars_6.jpg";
 
 const features = [
   {
@@ -95,16 +101,37 @@ const testimonials = [
     quote: "FeedbackForge replaced three different tools for us. The AI insights alone save us hours every week.",
     name: "Sarah Chen",
     role: "Product Manager",
+    avatar: avatar1,
   },
   {
     quote: "The embeddable widget is so simple to set up. We started collecting feedback within 5 minutes of signing up.",
     name: "Marcus Rivera",
     role: "Engineering Lead",
+    avatar: avatar2,
   },
   {
     quote: "Public roadmap with upvoting means we always build what users actually want. Game changer for our prioritization.",
     name: "Emily Watkins",
     role: "Founder & CEO",
+    avatar: avatar3,
+  },
+  {
+    quote: "We went from guessing what to build next to having real data. The response dashboard is incredibly well designed.",
+    name: "Jessica Torres",
+    role: "Head of Product",
+    avatar: avatar4,
+  },
+  {
+    quote: "The changelog feature keeps our users in the loop and shows them we actually listen. Our retention improved noticeably.",
+    name: "Aisha Patel",
+    role: "Customer Success Lead",
+    avatar: avatar5,
+  },
+  {
+    quote: "Lifetime deal was a no-brainer. We use it across four products now and it pays for itself every single month.",
+    name: "Daniel Ortiz",
+    role: "Co-Founder & CTO",
+    avatar: avatar6,
   },
 ];
 
@@ -502,7 +529,7 @@ export default function Landing() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {testimonials.map((t, i) => (
               <Card key={i} data-testid={`card-testimonial-${i}`}>
                 <CardContent className="p-6 space-y-4">
@@ -512,9 +539,17 @@ export default function Landing() {
                     ))}
                   </div>
                   <p className="text-sm leading-relaxed italic text-muted-foreground">"{t.quote}"</p>
-                  <div>
-                    <p className="text-sm font-semibold">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.role}</p>
+                  <div className="flex items-center gap-3 pt-1">
+                    <img
+                      src={t.avatar}
+                      alt={t.name}
+                      className="w-10 h-10 rounded-full object-cover ring-2 ring-muted shrink-0"
+                      data-testid={`img-testimonial-avatar-${i}`}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold" data-testid={`text-testimonial-name-${i}`}>{t.name}</p>
+                      <p className="text-xs text-muted-foreground">{t.role}</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
