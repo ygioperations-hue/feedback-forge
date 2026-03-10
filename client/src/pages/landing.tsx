@@ -32,12 +32,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import avatar1 from "@assets/stock_images/testimonial_avatars_1.jpg";
+import avatar1 from "@assets/stock_images/avatar_sarah.png";
 import avatar2 from "@assets/stock_images/avatar_marcus.png";
-import avatar3 from "@assets/stock_images/testimonial_avatars_3.jpg";
-import avatar4 from "@assets/stock_images/testimonial_avatars_4.jpg";
-import avatar5 from "@assets/stock_images/testimonial_avatars_5.jpg";
-import avatar6 from "@assets/stock_images/testimonial_avatars_6.jpg";
+import avatar3 from "@assets/stock_images/avatar_emily.png";
+import avatar4 from "@assets/stock_images/avatar_jessica.png";
+import avatar5 from "@assets/stock_images/avatar_aisha.png";
+import avatar6 from "@assets/stock_images/avatar_daniel.png";
 
 const features = [
   {
