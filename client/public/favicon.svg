@@ -1,8 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Background rounded square -->
   <rect width="64" height="64" rx="14" fill="hsl(221, 83%, 53%)"/>
-  <g transform="translate(14, 14)">
-    <path d="M21 15H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3v4l4-4h7a2 2 0 0 0 2-2V17a2 2 0 0 0-2-2z" fill="white" stroke="white" stroke-width="0.5"/>
-    <line x1="9" y1="20" x2="19" y2="20" stroke="hsl(221, 83%, 53%)" stroke-width="2" stroke-linecap="round"/>
-    <line x1="9" y1="24" x2="15" y2="24" stroke="hsl(221, 83%, 53%)" stroke-width="2" stroke-linecap="round"/>
-  </g>
+  <!-- Message bubble body -->
+  <rect x="12" y="10" width="40" height="30" rx="5" fill="white"/>
+  <!-- Tail at bottom-left -->
+  <polygon points="12,38 12,48 22,38" fill="white"/>
+  <!-- Text lines in brand blue -->
+  <line x1="19" y1="20" x2="45" y2="20" stroke="hsl(221, 83%, 53%)" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="19" y1="29" x2="38" y2="29" stroke="hsl(221, 83%, 53%)" stroke-width="3.5" stroke-linecap="round"/>
 </svg>
