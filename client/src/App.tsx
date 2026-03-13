@@ -29,6 +29,7 @@ import Login from "@/pages/login";
 import Signup from "@/pages/signup";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
+import { CookieConsent } from "@/components/cookie-consent";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const style = {
@@ -129,6 +130,7 @@ function App() {
         <AuthProvider>
           <TooltipProvider>
             <Toaster />
+            <CookieConsent />
             <Router />
           </TooltipProvider>
         </AuthProvider>
