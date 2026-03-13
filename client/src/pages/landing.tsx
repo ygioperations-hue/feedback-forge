@@ -593,26 +593,89 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="border-t py-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary">
-                <MessageSquareText className="w-3.5 h-3.5 text-primary-foreground" />
+      <footer className="border-t bg-muted/20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+            {/* Column 1 — Brand */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary">
+                  <MessageSquareText className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <span className="text-base font-semibold" data-testid="text-footer-brand">FeedbackForge</span>
               </div>
-              <span className="text-sm font-semibold" data-testid="text-footer-brand">FeedbackForge</span>
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+                Collect, understand, and act on customer feedback — all in one place.
+              </p>
+              <a
+                href="mailto:support@feedbackforge.co"
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="link-footer-support"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                support@feedbackforge.co
+              </a>
             </div>
-            <a
-              href="mailto:support@feedbackforge.co"
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="link-footer-support"
-            >
-              <Mail className="w-3.5 h-3.5" />
-              support@feedbackforge.co
-            </a>
+
+            {/* Column 2 — Product */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold">Product</h3>
+              <ul className="space-y-3">
+                <li>
+                  <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-features">
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-pricing">
+                    Pricing
+                  </a>
+                </li>
+                <li>
+                  <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-testimonials">
+                    Testimonials
+                  </a>
+                </li>
+                <li>
+                  <Link href="/signup" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-signup">
+                    Get Started
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Column 3 — Legal */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold">Legal</h3>
+              <ul className="space-y-3">
+                <li>
+                  <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-privacy">
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-terms">
+                    Terms of Service
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom bar */}
+          <div className="mt-12 pt-6 border-t flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground" data-testid="text-footer-copy">
               &copy; {new Date().getFullYear()} FeedbackForge. All rights reserved.
             </p>
+            <div className="flex items-center gap-4">
+              <Link href="/privacy" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                Privacy
+              </Link>
+              <Link href="/terms" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                Terms
+              </Link>
+              <a href="mailto:support@feedbackforge.co" className="text-xs text-muted-foreground hover:text-foreground transition-colors">Contact</a>
+            </div>
           </div>
         </div>
       </footer>
