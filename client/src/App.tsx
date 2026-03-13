@@ -27,6 +27,8 @@ import Profile from "@/pages/profile";
 import Billing from "@/pages/billing";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
+import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfService from "@/pages/terms-of-service";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const style = {
@@ -78,6 +80,8 @@ function Router() {
       <Route path="/roadmap/:slug" component={PublicRoadmap} />
       <Route path="/changelog/:slug" component={PublicChangelog} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/privacy" component={PrivacyPolicy} />
+      <Route path="/terms" component={TermsOfService} />
       <Route path="/dashboard">
         <AppLayout><RequireCustomer><Dashboard /></RequireCustomer></AppLayout>
       </Route>
