@@ -31,7 +31,7 @@ export function CookieConsent() {
     <div
       role="dialog"
       aria-label="Cookie notice"
-      className="fixed bottom-0 left-0 right-0 z-[200] p-4 sm:p-6"
+      className="fixed bottom-0 left-0 right-0 z-[90] p-4 sm:p-6"
       data-testid="cookie-consent-banner"
     >
       <div className="mx-auto max-w-3xl rounded-lg border bg-background/95 backdrop-blur-sm shadow-lg p-4 sm:p-5">
