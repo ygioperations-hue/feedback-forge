@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  MessageSquareText,
   ArrowRight,
   Star,
   BarChart3,
@@ -26,6 +25,7 @@ import {
   X,
   Mail,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -197,11 +197,8 @@ export default function Landing() {
       <nav className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary">
-                <MessageSquareText className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-bold tracking-tight" data-testid="text-landing-brand">FeedbackForge</span>
+            <Link href="/" className="flex items-center" data-testid="text-landing-brand">
+              <BrandLogo size="nav" />
             </Link>
 
             <div className="hidden md:flex items-center gap-6">
@@ -598,11 +595,8 @@ export default function Landing() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
             {/* Column 1 — Brand */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary">
-                  <MessageSquareText className="w-4 h-4 text-primary-foreground" />
-                </div>
-                <span className="text-base font-semibold" data-testid="text-footer-brand">FeedbackForge</span>
+              <div className="flex items-center" data-testid="text-footer-brand">
+                <BrandLogo size="footer" />
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
                 Collect, understand, and act on customer feedback — all in one place.

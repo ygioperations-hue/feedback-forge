@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquareText, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 
 export default function Login() {
   usePageTitle("Sign In");
@@ -48,10 +49,9 @@ export default function Login() {
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary">
-            <MessageSquareText className="w-6 h-6 text-primary-foreground" />
+          <div data-testid="text-login-title">
+            <BrandLogo size="auth" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-login-title">FeedbackForge</h1>
           <p className="text-sm text-muted-foreground">Sign in to your account</p>
         </div>
 

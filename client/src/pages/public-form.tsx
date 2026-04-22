@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Star, CheckCircle, MessageSquareText } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import type { ProjectWithQuestions } from "@shared/schema";
 
 function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -132,11 +133,8 @@ export default function PublicForm() {
     <div className="min-h-screen bg-background flex items-start justify-center p-4 pt-8 sm:pt-16">
       <div className="w-full max-w-xl space-y-4">
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
-              <MessageSquareText className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="text-xs text-muted-foreground">FeedbackForge</span>
+          <div data-testid="text-form-brand">
+            <BrandLogo size="powered" />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-form-title">{project.name}</h1>
           {project.description && (

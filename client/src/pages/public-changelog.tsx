@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, MessageSquareText, Sparkles, Bug, Lightbulb, Zap } from "lucide-react";
+import { FileText, Sparkles, Bug, Lightbulb, Zap } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import type { ChangelogItem } from "@shared/schema";
 
 const typeConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline"; icon: typeof Sparkles }> = {
@@ -69,11 +70,8 @@ export default function PublicChangelog() {
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto p-6 pb-16">
         <header className="mb-8 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground mb-4">
-            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
-              <MessageSquareText className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="text-sm font-medium" data-testid="text-changelog-brand">FeedbackForge</span>
+          <div className="mb-4" data-testid="text-changelog-brand">
+            <BrandLogo size="powered" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-changelog-title">{project.name} Changelog</h1>
           {project.description && (
@@ -134,7 +132,10 @@ export default function PublicChangelog() {
         )}
 
         <footer className="mt-12 text-center">
-          <p className="text-xs text-muted-foreground">Powered by FeedbackForge</p>
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span>Powered by</span>
+            <BrandLogo size="powered" className="h-5" />
+          </div>
         </footer>
       </div>
     </div>

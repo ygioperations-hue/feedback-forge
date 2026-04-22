@@ -22,6 +22,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.classList.remove("light", "dark");
     root.classList.add(theme);
     localStorage.setItem("theme", theme);
+
+    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"][type="image/svg+xml"]');
+    if (favicon) {
+      favicon.href = theme === "dark" ? "/favicon-dark.svg" : "/favicon-light.svg";
+    }
   }, [theme]);
 
   const toggleTheme = () => {

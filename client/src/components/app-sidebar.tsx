@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BrandLogo } from "@/components/brand-logo";
 
 const customerNavItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -39,12 +40,13 @@ export function AppSidebar() {
   return (
     <Sidebar data-testid="sidebar-nav">
       <SidebarHeader className="p-4 border-b">
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary shrink-0">
-            <MessageSquareText className="w-4 h-4 text-primary-foreground" />
+        <div className="flex items-center min-w-0">
+          <div data-testid="text-sidebar-brand" className="group-data-[collapsible=icon]:hidden">
+            <BrandLogo size="sidebar" />
           </div>
-          <div className="min-w-0">
-            <span className="text-sm font-semibold tracking-tight block truncate" data-testid="text-sidebar-brand">FeedbackForge</span>
+          <div className="hidden group-data-[collapsible=icon]:block">
+            <img src="/favicon-light.svg" alt="FeedbackForge" className="h-8 w-8 dark:hidden" />
+            <img src="/favicon-dark.svg" alt="FeedbackForge" className="hidden h-8 w-8 dark:block" />
           </div>
         </div>
       </SidebarHeader>

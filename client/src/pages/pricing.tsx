@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Check, MessageSquareText, Shield, Zap, Crown, Users, BarChart3, Code, Star, Lock } from "lucide-react";
+import { Check, Shield, Zap, Crown, Users, BarChart3, Code, Star, Lock } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { BrandLogo } from "@/components/brand-logo";
 
 /* Subscription plans hidden for Phase 1 launch — only LTD via Stripe is active
 const subscriptionPlans = [
@@ -84,13 +85,10 @@ export default function Pricing() {
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto p-6 pb-16">
         <header className="mb-4 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground mb-4">
+          <div className="mb-4">
             <Link href="/">
-              <div className="flex items-center gap-2 cursor-pointer">
-                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
-                  <MessageSquareText className="w-4 h-4 text-primary-foreground" />
-                </div>
-                <span className="text-sm font-medium" data-testid="text-pricing-brand">FeedbackForge</span>
+              <div className="inline-flex items-center cursor-pointer" data-testid="text-pricing-brand">
+                <BrandLogo size="powered" />
               </div>
             </Link>
           </div>
@@ -236,7 +234,10 @@ export default function Pricing() {
         </div>
 
         <footer className="text-center">
-          <p className="text-xs text-muted-foreground">Powered by FeedbackForge</p>
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span>Powered by</span>
+            <BrandLogo size="powered" className="h-5" />
+          </div>
         </footer>
       </div>
     </div>
