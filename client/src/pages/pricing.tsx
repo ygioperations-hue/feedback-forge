@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Check, Shield, Zap, Crown, Users, BarChart3, Code, Star, Lock } from "lucide-react";
+import { Check, Shield, Zap, Crown, BarChart3, Code, Lock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { BrandLogo } from "@/components/brand-logo";
 
@@ -181,27 +181,27 @@ export default function Pricing() {
         )}
 
         <div className="text-center space-y-6 mb-12">
-          <h2 className="text-xl font-semibold">Trusted by product teams everywhere</h2>
+          <h2 className="text-xl font-semibold">Simple, transparent pricing</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-2xl mx-auto">
             <div className="flex flex-col items-center gap-1 p-3">
-              <Users className="w-6 h-6 text-muted-foreground" />
-              <span className="text-2xl font-bold">1,200+</span>
-              <span className="text-xs text-muted-foreground">Active Users</span>
+              <Zap className="w-6 h-6 text-muted-foreground" />
+              <span className="text-2xl font-bold">7-Day</span>
+              <span className="text-xs text-muted-foreground">Free Trial</span>
             </div>
             <div className="flex flex-col items-center gap-1 p-3">
-              <BarChart3 className="w-6 h-6 text-muted-foreground" />
-              <span className="text-2xl font-bold">50K+</span>
-              <span className="text-xs text-muted-foreground">Responses Collected</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 p-3">
-              <Star className="w-6 h-6 text-muted-foreground" />
-              <span className="text-2xl font-bold">4.9/5</span>
-              <span className="text-xs text-muted-foreground">User Rating</span>
+              <Crown className="w-6 h-6 text-muted-foreground" />
+              <span className="text-2xl font-bold">$59 One-Time</span>
+              <span className="text-xs text-muted-foreground">Lifetime Access</span>
             </div>
             <div className="flex flex-col items-center gap-1 p-3">
               <Shield className="w-6 h-6 text-muted-foreground" />
-              <span className="text-2xl font-bold">99.9%</span>
-              <span className="text-xs text-muted-foreground">Uptime</span>
+              <span className="text-2xl font-bold">No recurring fees</span>
+              <span className="text-xs text-muted-foreground">ever</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 p-3">
+              <Zap className="w-6 h-6 text-muted-foreground" />
+              <span className="text-2xl font-bold">AI-powered insights</span>
+              <span className="text-xs text-muted-foreground">(GPT-4o)</span>
             </div>
           </div>
         </div>

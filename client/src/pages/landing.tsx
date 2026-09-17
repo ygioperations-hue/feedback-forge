@@ -32,12 +32,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import avatar1 from "@assets/stock_images/avatar_sarah.png";
-import avatar2 from "@assets/stock_images/avatar_marcus.png";
-import avatar3 from "@assets/stock_images/avatar_emily.png";
-import avatar4 from "@assets/stock_images/avatar_jessica.png";
-import avatar5 from "@assets/stock_images/avatar_aisha.png";
-import avatar6 from "@assets/stock_images/avatar_daniel.png";
 
 const features = [
   {
@@ -95,45 +89,6 @@ const plans = [
   { id: "monthly", name: "Monthly", price: "$29", period: "/month", ... },
   { id: "yearly", name: "Yearly", price: "$249", period: "/year", ... },
 ]; */
-
-const testimonials = [
-  {
-    quote: "FeedbackForge replaced three different tools for us. The AI insights alone save us hours every week.",
-    name: "Sarah Chen",
-    role: "Product Manager",
-    avatar: avatar1,
-  },
-  {
-    quote: "The embeddable widget is so simple to set up. We started collecting feedback within 5 minutes of signing up.",
-    name: "Marcus Rivera",
-    role: "Engineering Lead",
-    avatar: avatar2,
-  },
-  {
-    quote: "Public roadmap with upvoting means we always build what users actually want. Game changer for our prioritization.",
-    name: "Emily Watkins",
-    role: "Founder & CEO",
-    avatar: avatar3,
-  },
-  {
-    quote: "We went from guessing what to build next to having real data. The response dashboard is incredibly well designed.",
-    name: "Jessica Torres",
-    role: "Head of Product",
-    avatar: avatar4,
-  },
-  {
-    quote: "The changelog feature keeps our users in the loop and shows them we actually listen. Our retention improved noticeably.",
-    name: "Aisha Patel",
-    role: "Customer Success Lead",
-    avatar: avatar5,
-  },
-  {
-    quote: "Lifetime deal was a no-brainer. We use it across four products now and it pays for itself every single month.",
-    name: "Daniel Ortiz",
-    role: "Co-Founder & CTO",
-    avatar: avatar6,
-  },
-];
 
 export default function Landing() {
   usePageTitle("");
@@ -205,7 +160,6 @@ export default function Landing() {
               <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-features">Features</a>
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how">How it Works</a>
               <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-pricing">Pricing</a>
-              <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-testimonials">Testimonials</a>
             </div>
 
             <div className="hidden md:flex items-center gap-3">
@@ -245,7 +199,6 @@ export default function Landing() {
               <a href="#features" className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Features</a>
               <a href="#how-it-works" className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>How it Works</a>
               <a href="#pricing" className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
-              <a href="#testimonials" className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Testimonials</a>
               <div className="flex flex-col gap-2 pt-2 border-t">
                 {isAuthenticated ? (
                   <Link href="/dashboard">
@@ -311,23 +264,23 @@ export default function Landing() {
           <div className="mt-16 sm:mt-20 grid grid-cols-2 sm:grid-cols-4 gap-6 max-w-2xl mx-auto">
             <div className="flex flex-col items-center gap-1 text-center">
               <Users className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-stat-users">1,200+</span>
-              <span className="text-xs text-muted-foreground">Active Users</span>
+              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-fact-trial">7-Day</span>
+              <span className="text-xs text-muted-foreground">Free Trial</span>
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <BarChart3 className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-stat-responses">50K+</span>
-              <span className="text-xs text-muted-foreground">Responses Collected</span>
+              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-fact-lifetime-price">$59 One-Time</span>
+              <span className="text-xs text-muted-foreground">Lifetime Access</span>
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <Star className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-stat-rating">4.9/5</span>
-              <span className="text-xs text-muted-foreground">User Rating</span>
+              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-fact-no-recurring-fees">No recurring fees</span>
+              <span className="text-xs text-muted-foreground">ever</span>
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <Shield className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-stat-uptime">99.9%</span>
-              <span className="text-xs text-muted-foreground">Uptime</span>
+              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-fact-ai-insights">AI-powered insights</span>
+              <span className="text-xs text-muted-foreground">(GPT-4o)</span>
             </div>
           </div>
         </div>
@@ -517,44 +470,6 @@ export default function Landing() {
         </div>
       </section>
 
-      <section id="testimonials" className="py-20 sm:py-28 border-t">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-14">
-            <Badge variant="secondary" className="mb-4">Testimonials</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4" data-testid="text-testimonials-title">
-              Loved by product teams
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {testimonials.map((t, i) => (
-              <Card key={i} data-testid={`card-testimonial-${i}`}>
-                <CardContent className="p-6 space-y-4">
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, j) => (
-                      <Star key={j} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
-                  <p className="text-sm leading-relaxed italic text-muted-foreground">"{t.quote}"</p>
-                  <div className="flex items-center gap-3 pt-1">
-                    <img
-                      src={t.avatar}
-                      alt={t.name}
-                      className="w-10 h-10 rounded-full object-cover ring-2 ring-muted shrink-0"
-                      data-testid={`img-testimonial-avatar-${i}`}
-                    />
-                    <div>
-                      <p className="text-sm font-semibold" data-testid={`text-testimonial-name-${i}`}>{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.role}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section className="py-20 sm:py-28 border-t bg-primary/5">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight" data-testid="text-cta-title">
@@ -623,11 +538,6 @@ export default function Landing() {
                 <li>
                   <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-pricing">
                     Pricing
-                  </a>
-                </li>
-                <li>
-                  <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-testimonials">
-                    Testimonials
                   </a>
                 </li>
                 <li>
