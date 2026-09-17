@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { PaywallGate } from "@/components/paywall-gate";
+import { PaywallGate, useActivation } from "@/components/paywall-gate";
 import type { Project, FeedbackResponse } from "@shared/schema";
 
 interface AISummary {
@@ -33,6 +33,7 @@ function DashboardContent() {
   usePageTitle("Dashboard");
   const { toast } = useToast();
   const [aiSummary, setAiSummary] = useState<AISummary | null>(null);
+  const { limits } = useActivation();
 
   const { data: projects, isLoading: loadingProjects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -97,6 +98,9 @@ function DashboardContent() {
   ];
 
   const isLoading = loadingProjects || loadingResponses;
+  const trialDaysRemaining = limits?.trialEndsAt
+    ? Math.max(1, Math.ceil((new Date(limits.trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
@@ -112,6 +116,22 @@ function DashboardContent() {
           </Button>
         </Link>
       </div>
+
+      {limits?.trialActive && (
+        <Card className="border-amber-500/30 bg-amber-500/5" data-testid="card-trial-banner">
+          <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="font-medium">Your free trial is active</p>
+              <p className="text-sm text-muted-foreground">
+                {trialDaysRemaining} {trialDaysRemaining === 1 ? "day" : "days"} remaining with full access.
+              </p>
+            </div>
+            <a href="/#pricing">
+              <Button variant="outline" data-testid="button-trial-upgrade">Upgrade to Lifetime Access</Button>
+            </a>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (

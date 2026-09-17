@@ -78,7 +78,8 @@ export function AppSidebar() {
                   <Crown className="w-3 h-3 mr-1" />
                   {user.planType === "lifetime_starter" || user.planType === "lifetime_pro" ? "Lifetime" :
                    user.planType === "monthly" ? "Monthly" :
-                   user.planType === "yearly" ? "Yearly" : user.planType}
+                   user.planType === "yearly" ? "Yearly" :
+                   user.planType === "trial" ? "Free Trial" : user.planType}
                 </Badge>
               </div>
             )}

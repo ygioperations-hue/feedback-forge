@@ -43,7 +43,7 @@ const pool = new pg.Pool({
 export const db = drizzle(pool);
 
 export interface IStorage {
-  createUser(user: InsertUser): Promise<User>;
+  createUser(user: InsertUser & Partial<Pick<User, "planType" | "trialEndsAt">>): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
   updateUserPassword(id: string, hashedPassword: string): Promise<void>;
@@ -112,7 +112,7 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async createUser(user: InsertUser): Promise<User> {
+  async createUser(user: InsertUser & Partial<Pick<User, "planType" | "trialEndsAt">>): Promise<User> {
     const [created] = await db.insert(users).values(user).returning();
     return created;
   }

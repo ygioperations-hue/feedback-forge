@@ -14,6 +14,9 @@ type LimitsData = {
   maxResponses: number | null;
   canCreateProject: boolean;
   canSubmitResponse: boolean;
+  trialActive: boolean;
+  trialEnded: boolean;
+  trialEndsAt: string | null;
 };
 
 export function useActivation() {
@@ -29,7 +32,7 @@ export function useActivation() {
   return {
     limits,
     isLoading,
-    activated: user?.planType !== "none" && user?.planType !== undefined,
+    activated: limits?.activated ?? false,
   };
 }
 
@@ -45,6 +48,8 @@ export function PaywallGate({ children }: { children: React.ReactNode }) {
 }
 
 function PaywallScreen() {
+  const { limits } = useActivation();
+  const trialEnded = limits?.trialEnded;
   const features = [
     { icon: Zap, label: "Unlimited feedback projects" },
     { icon: BarChart3, label: "Unlimited responses" },
@@ -62,10 +67,12 @@ function PaywallScreen() {
             <Lock className="w-8 h-8 text-amber-500" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-paywall-title">
-            Activate Your Account
+            {trialEnded ? "Your free trial has ended. Upgrade to continue" : "Activate Your Account"}
           </h1>
           <p className="text-muted-foreground max-w-md mx-auto">
-            Get a plan or redeem a Lifetime Deal code to unlock all features and start collecting feedback.
+            {trialEnded
+              ? "Upgrade to continue using your feedback projects and insights."
+              : "Get a plan or redeem a Lifetime Deal code to unlock all features and start collecting feedback."}
           </p>
         </div>
 

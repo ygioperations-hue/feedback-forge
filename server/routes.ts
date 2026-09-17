@@ -136,19 +136,45 @@ const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
-async function isUserActivated(userId: string): Promise<{ activated: boolean; plan: string }> {
+const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const TRIAL_ENDED_MESSAGE = "Your free trial has ended. Upgrade to continue";
+
+type AccessStatus = {
+  activated: boolean;
+  plan: string;
+  trialActive: boolean;
+  trialEnded: boolean;
+  trialEndsAt: Date | null;
+};
+
+async function getAccessStatus(userId: string): Promise<AccessStatus> {
   const user = await storage.getUserById(userId);
-  if (!user) return { activated: false, plan: "none" };
+  if (!user) return { activated: false, plan: "none", trialActive: false, trialEnded: false, trialEndsAt: null };
 
   if (user.role === "platform_admin") {
-    return { activated: true, plan: "lifetime_pro" };
+    return { activated: true, plan: "lifetime_pro", trialActive: false, trialEnded: false, trialEndsAt: user.trialEndsAt };
+  }
+
+  if (user.planType === "trial") {
+    if (user.trialEndsAt && user.trialEndsAt > new Date()) {
+      return { activated: true, plan: "trial", trialActive: true, trialEnded: false, trialEndsAt: user.trialEndsAt };
+    }
+
+    await storage.updateUserPlanType(user.id, "none");
+    return { activated: false, plan: "none", trialActive: false, trialEnded: true, trialEndsAt: user.trialEndsAt };
   }
 
   if (user.planType !== "none") {
-    return { activated: true, plan: user.planType };
+    return { activated: true, plan: user.planType, trialActive: false, trialEnded: false, trialEndsAt: user.trialEndsAt };
   }
 
-  return { activated: false, plan: "none" };
+  return {
+    activated: false,
+    plan: "none",
+    trialActive: false,
+    trialEnded: !!user.trialEndsAt && user.trialEndsAt <= new Date(),
+    trialEndsAt: user.trialEndsAt,
+  };
 }
 
 export async function registerRoutes(
@@ -178,9 +204,12 @@ export async function registerRoutes(
         password: hashedPassword,
         firstName: sanitize(firstName),
         lastName: sanitize(lastName),
+        planType: "trial",
+        trialEndsAt: new Date(Date.now() + TRIAL_DURATION_MS),
       });
 
       req.session.userId = user.id;
+      const access = await getAccessStatus(user.id);
 
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -188,7 +217,7 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to create account" });
         }
         res.status(201).json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: access.plan, trialEndsAt: access.trialEndsAt },
         });
       });
     } catch (err: any) {
@@ -219,6 +248,7 @@ export async function registerRoutes(
       }
 
       req.session.userId = user.id;
+      const access = await getAccessStatus(user.id);
 
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -226,7 +256,7 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to log in" });
         }
         res.json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: access.plan, trialEndsAt: access.trialEndsAt },
         });
       });
     } catch (err) {
@@ -254,9 +284,10 @@ export async function registerRoutes(
     if (!user) {
       return res.status(401).json({ message: "Not authenticated" });
     }
+    const access = await getAccessStatus(user.id);
 
     res.json({
-      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: access.plan, trialEndsAt: access.trialEndsAt },
     });
   });
 
@@ -343,10 +374,10 @@ export async function registerRoutes(
   app.post("/api/projects", requireAuth, async (req, res) => {
     try {
       const uid = req.session.userId!;
-      const { activated, plan } = await isUserActivated(uid);
+      const { activated, plan } = await getAccessStatus(uid);
 
       if (!activated) {
-        return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
+        return res.status(403).json({ message: TRIAL_ENDED_MESSAGE });
       }
 
       if (plan === "lifetime_starter") {
@@ -563,9 +594,9 @@ export async function registerRoutes(
       }
 
       if (project.userId) {
-        const { activated } = await isUserActivated(project.userId);
+        const { activated } = await getAccessStatus(project.userId);
         if (!activated) {
-          return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
+          return res.status(403).json({ message: TRIAL_ENDED_MESSAGE });
         }
       }
 
@@ -588,9 +619,9 @@ export async function registerRoutes(
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
 
       if (project.userId) {
-        const { activated } = await isUserActivated(project.userId);
+        const { activated } = await getAccessStatus(project.userId);
         if (!activated) {
-          return res.status(403).json({ message: "Account not activated. Feedback collection is paused." });
+          return res.status(403).json({ message: TRIAL_ENDED_MESSAGE });
         }
       }
 
@@ -722,9 +753,9 @@ export async function registerRoutes(
   app.post("/api/ai/summary", requireAuth, aiLimiter, async (req, res) => {
     try {
       const uid = req.session.userId!;
-      const { activated } = await isUserActivated(uid);
+      const { activated } = await getAccessStatus(uid);
       if (!activated) {
-        return res.status(403).json({ message: "AI Insights requires an active plan. Upgrade to unlock." });
+        return res.status(403).json({ message: TRIAL_ENDED_MESSAGE });
       }
 
       const apiKey = process.env.OPENAI_API_KEY;
@@ -1344,7 +1375,7 @@ export async function registerRoutes(
         totalResponses += await storage.getResponseCountByProject(proj.id);
       }
 
-      const { activated, plan } = await isUserActivated(uid);
+      const { activated, plan, trialActive, trialEnded, trialEndsAt } = await getAccessStatus(uid);
 
       const maxProjects = !activated ? 0 : (plan === "lifetime_starter" ? 3 : null);
       res.json({
@@ -1356,6 +1387,9 @@ export async function registerRoutes(
         maxResponses: activated ? null : 0,
         canCreateProject: activated && (maxProjects === null || projectCount < maxProjects),
         canSubmitResponse: activated,
+        trialActive,
+        trialEnded,
+        trialEndsAt,
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch limits" });
