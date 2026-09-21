@@ -4,6 +4,12 @@ A SaaS feedback collection and management platform built with React, Express.js,
 
 ---
 
+## Monthly usage rollout and tests
+
+The server creates and backfills `monthly_usage` and seeds the Growth plan before it starts serving requests. Equivalent idempotent SQL is in `migrations/0001_monthly_usage.sql` and `migrations/0002_growth_plan.sql` for deployments that apply database migrations separately. Apply both migrations before starting the new app version. The Growth Stripe price is linked or created by the existing Stripe startup sync when Stripe keys are configured.
+
+Run `npm test`, `npm run check`, and `npm run build` with Node 20 or newer. Set `TEST_DATABASE_URL` to a disposable PostgreSQL database with the app schema to run the database integration spec; it is skipped otherwise. Never point it at production because the spec inserts and deletes data.
+
 ## Tech Stack
 
 ### Frontend

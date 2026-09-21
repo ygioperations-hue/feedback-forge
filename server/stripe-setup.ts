@@ -41,9 +41,9 @@ export async function ensureStripePrices() {
 
       const isOneTime = plan.interval === 'lifetime';
       const existingPrice = existingPrices.data.find(
-        p => isOneTime
-          ? (p.unit_amount === plan.price && !p.recurring)
-          : (p.unit_amount === plan.price && p.recurring?.interval === plan.interval)
+        p => p.metadata?.planKey === plan.key || (p.currency === 'usd' && p.unit_amount === plan.price && (
+          isOneTime ? !p.recurring : p.recurring?.interval === plan.interval
+        ))
       );
 
       if (existingPrice) {
@@ -54,7 +54,7 @@ export async function ensureStripePrices() {
           product: productId,
           unit_amount: plan.price,
           currency: 'usd',
-          metadata: { plan: plan.name.toLowerCase() },
+          metadata: { plan: plan.name.toLowerCase(), planKey: plan.key },
         };
         if (!isOneTime) {
           priceParams.recurring = { interval: plan.interval as 'month' | 'year' };

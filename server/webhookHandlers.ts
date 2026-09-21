@@ -1,5 +1,7 @@
 import { getStripeClient } from './stripeClient';
 import { storage } from './storage';
+import { GROWTH_PLAN_KEY } from './monthlyQuota';
+import { findPlanByStripePriceId, planTypeForPlan } from './billingPlans';
 
 function parseStripeDate(value: any): Date | undefined {
   if (!value) return undefined;
@@ -64,6 +66,7 @@ export class WebhookHandlers {
       }
     } catch (err: any) {
       console.error('Error processing webhook event:', err.message, err.stack);
+      throw err;
     }
   }
 
@@ -98,7 +101,7 @@ export class WebhookHandlers {
 
       try {
         const activeSub = await storage.getActiveSubscription(user.id);
-        if (activeSub && activeSub.stripeSubscriptionId) {
+        if (activeSub && activeSub.plan.key !== GROWTH_PLAN_KEY && activeSub.stripeSubscriptionId) {
           const stripe = getStripeClient();
           await stripe.subscriptions.cancel(activeSub.stripeSubscriptionId);
           await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, { status: 'canceled' });
@@ -116,6 +119,11 @@ export class WebhookHandlers {
       return;
     }
 
+    const checkoutPlan = await storage.getPlanById(planId);
+    if (!checkoutPlan || (metadata.planKey && checkoutPlan.key !== metadata.planKey)) {
+      throw new Error(`Checkout plan metadata did not match a configured plan`);
+    }
+
     const existingSub = await storage.getSubscriptionByStripeId(stripeSubscriptionId);
     if (existingSub) {
       console.log(`Subscription already exists for ${stripeSubscriptionId}, skipping creation`);
@@ -124,12 +132,17 @@ export class WebhookHandlers {
 
     let periodStart: Date = new Date();
     let periodEnd: Date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    let subscriptionStatus = 'active';
 
     try {
       const stripe = getStripeClient();
       const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
       const subAny = stripeSub as any;
+      subscriptionStatus = subAny.status || subscriptionStatus;
       const itemData = subAny.items?.data?.[0];
+      if (itemData?.price?.id !== checkoutPlan.stripePriceId) {
+        throw new Error(`Checkout subscription price did not match the configured plan`);
+      }
       const parsedStart = parseStripeDate(subAny.current_period_start)
         || parseStripeDate(itemData?.current_period_start)
         || parseStripeDate(subAny.start_date);
@@ -140,24 +153,21 @@ export class WebhookHandlers {
       
     } catch (err: any) {
       console.error('Failed to retrieve subscription from Stripe:', err.message);
+      throw err;
     }
 
     await storage.createSubscription({
       userId: user.id,
       planId,
       stripeSubscriptionId,
-      status: 'active',
+      status: subscriptionStatus,
       currentPeriodStart: periodStart,
       currentPeriodEnd: periodEnd,
       cancelAtPeriodEnd: false,
     });
 
-    if (!user.planType?.startsWith('lifetime')) {
-      const plan = await storage.getPlanById(planId);
-      if (plan) {
-        const newPlanType = plan.interval === 'year' ? 'yearly' : 'monthly';
-        await storage.updateUserPlanType(user.id, newPlanType);
-      }
+    if (!user.planType?.startsWith('lifetime') && ['active', 'trialing'].includes(subscriptionStatus)) {
+      await storage.updateUserPlanType(user.id, planTypeForPlan(checkoutPlan));
     }
   }
 
@@ -178,14 +188,7 @@ export class WebhookHandlers {
         if (user) {
           const plans = await storage.getPlans();
           const priceId = data.items?.data?.[0]?.price?.id || data.plan?.id;
-          let matchedPlan = plans.find(p => p.stripePriceId === priceId);
-          if (!matchedPlan) {
-            const interval = data.items?.data?.[0]?.price?.recurring?.interval || data.plan?.interval;
-            matchedPlan = plans.find(p => p.interval === interval);
-          }
-          if (!matchedPlan && plans.length > 0) {
-            matchedPlan = plans[0];
-          }
+          const matchedPlan = findPlanByStripePriceId(plans, priceId);
 
           if (matchedPlan) {
             const evtItemData = data.items?.data?.[0];
@@ -208,8 +211,7 @@ export class WebhookHandlers {
             });
 
             if (!user.planType?.startsWith('lifetime')) {
-              const newPlanType = matchedPlan.interval === 'year' ? 'yearly' : 'monthly';
-              await storage.updateUserPlanType(user.id, newPlanType);
+              await storage.updateUserPlanType(user.id, planTypeForPlan(matchedPlan));
             }
           }
         }
@@ -248,10 +250,14 @@ export class WebhookHandlers {
         const plans = await storage.getPlans();
         const newPlan = plans.find(p => p.id === updateData.planId);
         if (newPlan) {
-          const newPlanType = newPlan.interval === 'year' ? 'yearly' : 'monthly';
-          await storage.updateUserPlanType(user.id, newPlanType);
+          await storage.updateUserPlanType(user.id, planTypeForPlan(newPlan));
         }
       }
+    }
+
+    if (customerId && !['active', 'trialing'].includes(status)) {
+      const user = await storage.getUserByStripeCustomerId(customerId);
+      if (user && !user.planType?.startsWith('lifetime')) await storage.updateUserPlanType(user.id, 'none');
     }
   }
 

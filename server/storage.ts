@@ -1,6 +1,7 @@
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, gte, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import { assertWithinLimit, resolveUsageEntitlement, GROWTH_PLAN_KEY, type UsageEntitlement } from "./monthlyQuota";
 import {
   users,
   plans,
@@ -8,6 +9,7 @@ import {
   projects,
   questions,
   responses,
+  monthlyUsage,
   answers,
   roadmapItems,
   changelogItems,
@@ -42,6 +44,72 @@ const pool = new pg.Pool({
 
 export const db = drizzle(pool);
 
+export { LIFETIME_MONTHLY_LIMIT, GROWTH_MONTHLY_RESPONSE_LIMIT, MonthlyLimitError, monthWindow } from "./monthlyQuota";
+import { monthWindow } from "./monthlyQuota";
+
+// Bootstrap before serving requests. The project currently has no migration runner;
+// this also makes the historical backfill safe and repeatable on each deployment.
+export async function ensureMonthlyUsage() {
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS monthly_usage (
+    id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind text NOT NULL,
+    status text NOT NULL DEFAULT 'complete',
+    response_id varchar UNIQUE,
+    occurred_at timestamp NOT NULL DEFAULT now()
+  )`);
+  await db.execute(sql`ALTER TABLE monthly_usage ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'complete'`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS monthly_usage_user_date_idx ON monthly_usage (user_id, occurred_at)`);
+  await db.execute(sql`INSERT INTO monthly_usage (user_id, kind, response_id, occurred_at)
+    SELECT p.user_id, 'response', r.id, r.submitted_at FROM responses r
+    JOIN projects p ON p.id = r.project_id WHERE p.user_id IS NOT NULL
+    AND r.submitted_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
+    AND r.submitted_at < date_trunc('month', now() AT TIME ZONE 'UTC') + interval '1 month'
+    ON CONFLICT (response_id) DO NOTHING`);
+}
+
+export async function ensureGrowthPlan() {
+  await db.execute(sql`ALTER TABLE plans ADD COLUMN IF NOT EXISTS plan_key text`);
+  await db.execute(sql`UPDATE plans SET plan_key = CASE
+    WHEN interval = 'lifetime' THEN 'lifetime'
+    WHEN interval = 'month' AND lower(name) = 'monthly' THEN 'legacy_monthly'
+    WHEN interval = 'year' AND lower(name) = 'yearly' THEN 'legacy_yearly'
+    ELSE 'legacy_' || id END WHERE plan_key IS NULL`);
+  await db.execute(sql`ALTER TABLE plans ALTER COLUMN plan_key SET NOT NULL`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS plans_plan_key_unique ON plans (plan_key)`);
+  await db.execute(sql`INSERT INTO plans (name, plan_key, price, interval)
+    VALUES ('Growth', ${GROWTH_PLAN_KEY}, 1900, 'month')
+    ON CONFLICT (plan_key) DO UPDATE SET name = EXCLUDED.name, price = EXCLUDED.price, interval = EXCLUDED.interval`);
+  await db.execute(sql`DELETE FROM subscriptions older USING subscriptions newer
+    WHERE older.stripe_subscription_id IS NOT NULL
+    AND older.stripe_subscription_id = newer.stripe_subscription_id
+    AND (older.created_at, older.id) < (newer.created_at, newer.id)`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_stripe_subscription_id_unique ON subscriptions (stripe_subscription_id)`);
+}
+
+async function countMonthlyUsage(client: Pick<typeof db, "select">, userId: string, kind?: "response" | "insight", now = new Date()): Promise<number> {
+  const { start, end } = monthWindow(now);
+  const pendingCutoff = new Date(now.getTime() - 30 * 60 * 1000);
+  const filters = [eq(monthlyUsage.userId, userId), gte(monthlyUsage.occurredAt, start), lt(monthlyUsage.occurredAt, end),
+    sql`(${monthlyUsage.status} = 'complete' OR (${monthlyUsage.status} = 'pending' AND ${monthlyUsage.occurredAt} >= ${pendingCutoff}))`];
+  if (kind) filters.push(eq(monthlyUsage.kind, kind));
+  const [result] = await client.select({ count: sql<number>`count(*)::int` }).from(monthlyUsage)
+    .where(and(...filters));
+  return result.count;
+}
+
+async function resolveEntitlement(client: any, user: User): Promise<UsageEntitlement> {
+  const [active] = await client.select({ key: plans.key }).from(subscriptions)
+    .innerJoin(plans, eq(subscriptions.planId, plans.id))
+    .where(and(eq(subscriptions.userId, user.id), sql`${subscriptions.status} IN ('active', 'trialing')`))
+    .orderBy(sql`${subscriptions.createdAt} DESC`).limit(1);
+  return resolveUsageEntitlement(user, active?.key);
+}
+
+async function usageForEntitlement(client: any, userId: string, entitlement: UsageEntitlement, kind: "response" | "insight") {
+  return countMonthlyUsage(client, userId, entitlement.sharedLifetimeLimit ? undefined : kind);
+}
+
 export interface IStorage {
   createUser(user: InsertUser & Partial<Pick<User, "planType" | "trialEndsAt">>): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -54,6 +122,7 @@ export interface IStorage {
 
   getPlans(): Promise<Plan[]>;
   getPlanById(id: string): Promise<Plan | undefined>;
+  getPlanByKey(key: string): Promise<Plan | undefined>;
   getPlanByInterval(interval: string): Promise<Plan | undefined>;
   createPlan(plan: InsertPlan): Promise<Plan>;
   updatePlanStripePriceId(id: string, stripePriceId: string): Promise<Plan>;
@@ -73,7 +142,13 @@ export interface IStorage {
   getResponses(userId: string): Promise<(FeedbackResponse & { answers: Answer[] })[]>;
   getResponse(id: string): Promise<(FeedbackResponse & { answers: (Answer & { question: Question })[] }) | undefined>;
   getResponsesByProject(projectId: string): Promise<ResponseWithAnswers[]>;
-  createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[]): Promise<FeedbackResponse>;
+  createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[], ownerId?: string): Promise<FeedbackResponse>;
+  getMonthlyUsage(userId: string): Promise<number>;
+  getMonthlyUsageBreakdown(userId: string): Promise<{ responses: number; insights: number; total: number }>;
+  getUsageEntitlement(userId: string): Promise<UsageEntitlement | undefined>;
+  reserveInsightRun(userId: string): Promise<string>;
+  completeInsightRun(id: string): Promise<void>;
+  releaseInsightRun(id: string): Promise<void>;
   getOrCreateWidgetQuestions(projectId: string): Promise<{ ratingId: string; categoryId: string; messageId: string }>;
   getRoadmapItemsByProject(projectId: string): Promise<RoadmapItem[]>;
   createRoadmapItem(item: InsertRoadmapItem): Promise<RoadmapItem>;
@@ -112,6 +187,45 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  async getMonthlyUsage(userId: string): Promise<number> {
+    return countMonthlyUsage(db, userId);
+  }
+
+  async getMonthlyUsageBreakdown(userId: string) {
+    const [responsesUsed, insightsUsed] = await Promise.all([
+      countMonthlyUsage(db, userId, "response"),
+      countMonthlyUsage(db, userId, "insight"),
+    ]);
+    return { responses: responsesUsed, insights: insightsUsed, total: responsesUsed + insightsUsed };
+  }
+
+  async getUsageEntitlement(userId: string): Promise<UsageEntitlement | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    return user ? resolveEntitlement(db, user) : undefined;
+  }
+
+  async reserveInsightRun(userId: string): Promise<string> {
+    return db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+      if (!user) throw new Error("User not found");
+      const entitlement = await resolveEntitlement(tx, user);
+      const used = await usageForEntitlement(tx, userId, entitlement, "insight");
+      assertWithinLimit(entitlement.aiInsightLimit, used);
+      const [usage] = await tx.insert(monthlyUsage).values({ userId, kind: "insight", status: "pending" }).returning({ id: monthlyUsage.id });
+      return usage.id;
+    });
+  }
+
+  async completeInsightRun(id: string): Promise<void> {
+    const [usage] = await db.update(monthlyUsage).set({ status: "complete" })
+      .where(and(eq(monthlyUsage.id, id), eq(monthlyUsage.status, "pending"), gte(monthlyUsage.occurredAt, new Date(Date.now() - 30 * 60 * 1000))))
+      .returning({ id: monthlyUsage.id });
+    if (!usage) throw new Error("AI summary took too long. Please try again.");
+  }
+
+  async releaseInsightRun(id: string): Promise<void> {
+    await db.delete(monthlyUsage).where(and(eq(monthlyUsage.id, id), eq(monthlyUsage.kind, "insight")));
+  }
   async createUser(user: InsertUser & Partial<Pick<User, "planType" | "trialEndsAt">>): Promise<User> {
     const [created] = await db.insert(users).values(user).returning();
     return created;
@@ -158,6 +272,11 @@ export class DatabaseStorage implements IStorage {
 
   async getPlanById(id: string): Promise<Plan | undefined> {
     const [plan] = await db.select().from(plans).where(eq(plans.id, id));
+    return plan;
+  }
+
+  async getPlanByKey(key: string): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.key, key));
     return plan;
   }
 
@@ -208,20 +327,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSubscription(sub: InsertSubscription): Promise<Subscription> {
-    const [created] = await db.insert(subscriptions).values(sub).returning();
-    return created;
+    return db.transaction(async (tx) => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, sub.userId)).for("update");
+      const [created] = await tx.insert(subscriptions).values(sub)
+        .onConflictDoUpdate({
+          target: subscriptions.stripeSubscriptionId,
+          set: {
+            planId: sub.planId,
+            status: sub.status,
+            currentPeriodStart: sub.currentPeriodStart,
+            currentPeriodEnd: sub.currentPeriodEnd,
+            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+          },
+        }).returning();
+      return created;
+    });
   }
 
   async updateSubscriptionByStripeId(
     stripeSubId: string,
     data: Partial<Pick<Subscription, "status" | "currentPeriodStart" | "currentPeriodEnd" | "cancelAtPeriodEnd" | "planId">>
   ): Promise<Subscription | undefined> {
-    const [updated] = await db
-      .update(subscriptions)
-      .set(data)
-      .where(eq(subscriptions.stripeSubscriptionId, stripeSubId))
-      .returning();
-    return updated;
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(subscriptions).where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+      if (!existing) return undefined;
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, existing.userId)).for("update");
+      const [updated] = await tx.update(subscriptions).set(data).where(eq(subscriptions.stripeSubscriptionId, stripeSubId)).returning();
+      return updated;
+    });
   }
 
   async getSubscriptionByStripeId(stripeSubId: string): Promise<Subscription | undefined> {
@@ -309,14 +442,24 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[]): Promise<FeedbackResponse> {
-    const [created] = await db.insert(responses).values(response).returning();
-    if (answersList.length > 0) {
-      await db.insert(answers).values(
-        answersList.map((a) => ({ ...a, responseId: created.id }))
-      );
-    }
-    return created;
+  async createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[], ownerId?: string): Promise<FeedbackResponse> {
+    return db.transaction(async (tx) => {
+      if (ownerId) {
+        const [user] = await tx.select().from(users).where(eq(users.id, ownerId)).for("update");
+        if (!user) throw new Error("User not found");
+        const entitlement = await resolveEntitlement(tx, user);
+        const used = await usageForEntitlement(tx, ownerId, entitlement, "response");
+        assertWithinLimit(entitlement.responseLimit, used);
+      }
+      const [created] = await tx.insert(responses).values(response).returning();
+      if (answersList.length) {
+        await tx.insert(answers).values(answersList.map((a) => ({ ...a, responseId: created.id })));
+      }
+      if (ownerId) {
+        await tx.insert(monthlyUsage).values({ userId: ownerId, kind: "response", responseId: created.id, occurredAt: created.submittedAt });
+      }
+      return created;
+    });
   }
 
   async getOrCreateWidgetQuestions(projectId: string): Promise<{ ratingId: string; categoryId: string; messageId: string }> {

@@ -106,6 +106,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const { ensureMonthlyUsage, ensureGrowthPlan } = await import("./storage");
+  await ensureGrowthPlan();
+  await ensureMonthlyUsage();
   const { seedDatabase } = await import("./seed");
   await seedDatabase().catch((err) => console.error("Seed error:", err));
 

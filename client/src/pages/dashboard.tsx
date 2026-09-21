@@ -8,7 +8,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { PaywallGate, useActivation } from "@/components/paywall-gate";
 import type { Project, FeedbackResponse } from "@shared/schema";
 
@@ -50,14 +50,25 @@ function DashboardContent() {
     },
     onSuccess: (data) => {
       setAiSummary(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
     },
     onError: (err: Error) => {
+      if (err.message.includes("Monthly limit reached")) queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
       toast({
-        title: "Failed to generate summary",
+        title: err.message.includes("Monthly limit reached") ? "Monthly limit reached" : "Failed to generate summary",
         description: err.message,
         variant: "destructive",
       });
     },
+  });
+
+  const growthCheckout = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/billing/checkout", { plan: "growth" });
+      return response.json();
+    },
+    onSuccess: (data) => { if (data.url) window.location.href = data.url; },
+    onError: (error: Error) => toast({ title: "Checkout failed", description: error.message, variant: "destructive" }),
   });
 
   const totalProjects = projects?.length ?? 0;
@@ -169,7 +180,7 @@ function DashboardContent() {
           </div>
           <Button
             onClick={() => summaryMutation.mutate()}
-            disabled={summaryMutation.isPending || totalResponses === 0}
+            disabled={summaryMutation.isPending || totalResponses === 0 || limits?.canRunAiInsight === false}
             data-testid="button-generate-ai-summary"
           >
             {summaryMutation.isPending ? (
@@ -181,6 +192,18 @@ function DashboardContent() {
           </Button>
         </CardHeader>
         <CardContent>
+          {limits?.monthlyLimit !== null && limits?.monthlyLimit !== undefined && (
+            <div className="mb-4 text-sm" data-testid="dashboard-monthly-usage">
+              <p>{limits.monthlyUsed} / {limits.monthlyLimit} monthly {limits.effectivePlan === "growth" ? "responses" : "responses and AI insights"} used. Resets {new Date(limits.resetsAt).toLocaleDateString()}.</p>
+              {limits.effectivePlan === "growth" && <p className="text-muted-foreground">AI insights are unlimited on Growth.</p>}
+              {limits.monthlyRemaining === 0 && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span>Monthly limit reached.</span>
+                  {limits.effectivePlan !== "growth" && <Button size="sm" onClick={() => growthCheckout.mutate()} disabled={growthCheckout.isPending} data-testid="button-dashboard-growth-upgrade">{growthCheckout.isPending ? "Redirecting..." : "Upgrade to Growth"}</Button>}
+                </div>
+              )}
+            </div>
+          )}
           {!aiSummary && !summaryMutation.isPending && (
             <div className="text-center py-6">
               <Sparkles className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />

@@ -84,12 +84,6 @@ const howItWorks = [
   },
 ];
 
-/* Subscription plans hidden for Phase 1 launch — only LTD via Stripe is active
-const plans = [
-  { id: "monthly", name: "Monthly", price: "$29", period: "/month", ... },
-  { id: "yearly", name: "Yearly", price: "$249", period: "/year", ... },
-]; */
-
 export default function Landing() {
   usePageTitle("");
   const { isAuthenticated } = useAuth();
@@ -111,7 +105,7 @@ export default function Landing() {
 
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
-  const handleCheckout = async (plan: "monthly" | "yearly" | "lifetime") => {
+  const handleCheckout = async (plan: "growth" | "lifetime") => {
     if (!isAuthenticated) {
       window.location.href = "/signup";
       return;
@@ -130,13 +124,18 @@ export default function Landing() {
     }
   };
 
+  const { data: limits } = useQuery<{ plan: string; effectivePlan: string }>({
+    queryKey: ["/api/limits"],
+    enabled: isAuthenticated,
+  });
+
   const redeemMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/ltd/redeem", { code: ltdCode.trim() });
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Lifetime deal activated!", description: "You now have unlimited access to all features." });
+      toast({ title: "Lifetime deal activated!", description: "Your lifetime plan is active with 50 monthly responses and AI insights." });
       setLtdCode("");
       queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -417,19 +416,19 @@ export default function Landing() {
             <CardContent className="p-6 sm:p-8 space-y-6">
               <div className="text-center">
                 <h3 className="text-xl font-semibold">Lifetime Access</h3>
-                <p className="text-sm text-muted-foreground mt-1">Everything unlimited, forever — one single payment</p>
+                <p className="text-sm text-muted-foreground mt-1">Lifetime access with 50 monthly responses and AI insights</p>
                 <div className="flex items-baseline justify-center gap-1 mt-4">
                   <span className="text-4xl font-bold">$59</span>
                   <span className="text-muted-foreground">one-time</span>
                 </div>
                 <p className="text-sm text-amber-600 dark:text-amber-400 font-medium mt-2" data-testid="text-ltd-savings">
-                  One payment. Unlimited access. Forever.
+                  One payment. Lifetime access. Forever.
                 </p>
               </div>
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto">
                 {[
                   "Unlimited projects",
-                  "Unlimited responses & submissions",
+                  "50 responses and AI insights per month",
                   "AI-powered insights (GPT-4o)",
                   "Public roadmap & changelog",
                   "Embeddable feedback widget",
@@ -448,7 +447,7 @@ export default function Landing() {
                     size="lg"
                     className="bg-amber-500 hover:bg-amber-600 text-white"
                     onClick={() => handleCheckout("lifetime")}
-                    disabled={checkoutLoading === "lifetime"}
+                    disabled={limits?.plan?.startsWith("lifetime") || checkoutLoading === "lifetime"}
                     data-testid="button-ltd-checkout-landing"
                   >
                     <Crown className="w-4 h-4 mr-2" />
@@ -466,7 +465,29 @@ export default function Landing() {
             </CardContent>
           </Card>
 
-          {/* Code redemption and subscription plans hidden for Phase 1 launch — only LTD via Stripe is active */}
+          <Card className="max-w-2xl mx-auto mb-8 border-purple-500/50" data-testid="card-growth-landing">
+            <CardContent className="p-6 sm:p-8 space-y-6 text-center">
+              <div>
+                <Badge className="mb-3">Higher usage</Badge>
+                <h3 className="text-xl font-semibold">Growth</h3>
+                <p className="text-sm text-muted-foreground mt-1">500 feedback responses per UTC month and unlimited AI insights</p>
+                <div className="flex items-baseline justify-center gap-1 mt-4"><span className="text-4xl font-bold">$19</span><span className="text-muted-foreground">/month</span></div>
+              </div>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto text-left">
+                {["500 responses per month", "Unlimited AI insights", "Public roadmap & changelog", "Cancel anytime"].map((item) => (
+                  <li key={item} className="flex items-start gap-2.5 text-sm"><Check className="w-4 h-4 shrink-0 mt-0.5 text-purple-500" /><span>{item}</span></li>
+                ))}
+              </ul>
+              {isAuthenticated ? (
+                <Button size="lg" onClick={() => handleCheckout("growth")} disabled={limits?.effectivePlan === "growth" || checkoutLoading === "growth"} data-testid="button-growth-checkout-landing">
+                  <Zap className="w-4 h-4 mr-2" />{limits?.effectivePlan === "growth" ? "Growth Active" : checkoutLoading === "growth" ? "Redirecting..." : "Upgrade to Growth — $19/month"}
+                </Button>
+              ) : (
+                <Link href="/signup"><Button size="lg" data-testid="button-growth-signup">Start Free Trial<ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
+              )}
+            </CardContent>
+          </Card>
+
         </div>
       </section>
 

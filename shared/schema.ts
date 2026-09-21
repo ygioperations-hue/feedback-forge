@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -20,6 +20,7 @@ export const users = pgTable("users", {
 
 export const plans = pgTable("plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("plan_key").notNull().unique(),
   name: text("name").notNull(),
   price: integer("price").notNull(),
   interval: text("interval").notNull(),
@@ -31,7 +32,7 @@ export const subscriptions = pgTable("subscriptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   planId: varchar("plan_id").notNull().references(() => plans.id),
-  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
   status: text("status").notNull().default("active"),
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),
@@ -68,6 +69,17 @@ export const responses = pgTable("responses", {
   respondentEmail: text("respondent_email"),
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
 });
+
+// Usage rows intentionally have no FK to responses or projects: deleting feedback
+// must not restore an account's allowance for the month.
+export const monthlyUsage = pgTable("monthly_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  status: text("status").notNull().default("complete"),
+  responseId: varchar("response_id").unique(),
+  occurredAt: timestamp("occurred_at").notNull().defaultNow(),
+}, (table) => [index("monthly_usage_user_date_idx").on(table.userId, table.occurredAt)]);
 
 export const answers = pgTable("answers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

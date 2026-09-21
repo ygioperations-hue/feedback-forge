@@ -7,16 +7,17 @@ export async function seedDatabase() {
   const existingPlans = await db.select().from(plans);
   if (existingPlans.length === 0) {
     await db.insert(plans).values([
-      { name: "Monthly", price: 2900, interval: "month" },
-      { name: "Yearly", price: 24900, interval: "year" },
-      { name: "Lifetime", price: 5900, interval: "lifetime" },
+      { key: "legacy_monthly", name: "Monthly", price: 2900, interval: "month" },
+      { key: "legacy_yearly", name: "Yearly", price: 24900, interval: "year" },
+      { key: "lifetime", name: "Lifetime", price: 5900, interval: "lifetime" },
+      { key: "growth_monthly", name: "Growth", price: 1900, interval: "month" },
     ]);
     console.log("Plans seeded: Monthly ($29/mo), Yearly ($249/yr), Lifetime ($59)");
   } else {
     const hasLifetime = existingPlans.some(p => p.interval === "lifetime");
     if (!hasLifetime) {
       await db.insert(plans).values([
-        { name: "Lifetime", price: 5900, interval: "lifetime" },
+        { key: "lifetime", name: "Lifetime", price: 5900, interval: "lifetime" },
       ]);
       console.log("Lifetime plan seeded ($59)");
     }
