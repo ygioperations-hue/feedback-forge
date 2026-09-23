@@ -1,286 +1,74 @@
-import { getStripeClient } from './stripeClient';
-import { storage } from './storage';
-import { GROWTH_PLAN_KEY } from './monthlyQuota';
-import { findPlanByStripePriceId, planTypeForPlan } from './billingPlans';
+import { getStripeClient } from "./stripeClient";
+import { storage } from "./storage";
+import { GROWTH_PLAN_KEY } from "./monthlyQuota";
+import { reconcileStripeSubscription } from "./stripeSubscriptions";
 
-function parseStripeDate(value: any): Date | undefined {
-  if (!value) return undefined;
-  if (typeof value === 'number') {
-    return new Date(value * 1000);
-  }
-  if (typeof value === 'string') {
-    const d = new Date(value);
-    if (!isNaN(d.getTime())) return d;
+export class WebhookSignatureError extends Error {}
+
+function idOf(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "id" in value && typeof (value as { id: unknown }).id === "string") {
+    return (value as { id: string }).id;
   }
   return undefined;
 }
 
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
-    if (!Buffer.isBuffer(payload)) {
-      throw new Error(
-        'STRIPE WEBHOOK ERROR: Payload must be a Buffer. ' +
-        'Received type: ' + typeof payload + '. ' +
-        'This usually means express.json() parsed the body before reaching this handler. ' +
-        'FIX: Ensure webhook route is registered BEFORE app.use(express.json()).'
-      );
-    }
-
-    const stripe = getStripeClient();
+    if (!Buffer.isBuffer(payload)) throw new Error("Stripe webhook payload must be a Buffer");
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) throw new Error("STRIPE_WEBHOOK_SECRET is not configured");
 
     let event: any;
-
-    if (!webhookSecret) {
-      throw new Error('STRIPE_WEBHOOK_SECRET is not configured. Webhooks cannot be processed without signature verification.');
-    }
-
     try {
-      event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-    } catch (err: any) {
-      console.error('Webhook signature verification failed:', err.message);
-      throw new Error(`Webhook signature verification failed: ${err.message}`);
+      event = getStripeClient().webhooks.constructEvent(payload, signature, webhookSecret);
+    } catch (error: any) {
+      throw new WebhookSignatureError(`Webhook signature verification failed: ${error.message}`);
     }
 
-    const eventType = event.type;
     const data = event.data?.object;
+    if (!data) return;
 
-    console.log(`Stripe webhook: ${eventType}`);
-
-    if (!data) {
-      console.log('Webhook: No data object in event');
-      return;
-    }
-
-    try {
-      if (eventType === 'checkout.session.completed') {
+    switch (event.type) {
+      case "checkout.session.completed":
         await WebhookHandlers.handleCheckoutCompleted(data);
-      }
-
-      if (eventType === 'customer.subscription.created' || eventType === 'customer.subscription.updated') {
-        await WebhookHandlers.handleSubscriptionUpdated(data);
-      }
-
-      if (eventType === 'customer.subscription.deleted') {
-        await WebhookHandlers.handleSubscriptionDeleted(data);
-      }
-    } catch (err: any) {
-      console.error('Error processing webhook event:', err.message, err.stack);
-      throw err;
+        break;
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        await WebhookHandlers.handleSubscriptionChanged(data);
+        break;
     }
   }
 
   static async handleCheckoutCompleted(data: any): Promise<void> {
-    const customerId = data.customer;
-    const stripeSubscriptionId = data.subscription;
-    const metadata = data.metadata || {};
-    const mode = data.mode;
-
-    console.log(`Checkout completed: customer=${customerId}, subscription=${stripeSubscriptionId}, mode=${mode}`);
-
-    if (!customerId) {
-      console.log('Checkout: Missing customer ID');
-      return;
-    }
-
+    const customerId = idOf(data.customer);
+    if (!customerId) throw new Error("Checkout session has no Stripe customer");
     const user = await storage.getUserByStripeCustomerId(customerId);
-    if (!user) {
-      console.error(`Webhook: No user found for Stripe customer ${customerId}`);
-      return;
-    }
+    if (!user) throw new Error(`No local user found for Stripe customer ${customerId}`);
 
-    const planId = metadata.planId;
-    if (!planId) {
-      console.error(`Webhook: No planId in checkout session metadata`);
-      return;
-    }
+    const metadata = data.metadata || {};
+    if (data.mode === "payment" || metadata.plan === "lifetime") {
+      const plan = metadata.planId ? await storage.getPlanById(metadata.planId) : undefined;
+      if (!plan || plan.key !== "lifetime") throw new Error("Lifetime checkout metadata does not match a configured plan");
+      await storage.updateUserPlanType(user.id, "lifetime_pro");
 
-    if (mode === 'payment' || metadata.plan === 'lifetime') {
-      console.log(`Lifetime payment completed for user ${user.id}`);
-      await storage.updateUserPlanType(user.id, 'lifetime_pro');
-
-      try {
-        const activeSub = await storage.getActiveSubscription(user.id);
-        if (activeSub && activeSub.plan.key !== GROWTH_PLAN_KEY && activeSub.stripeSubscriptionId) {
-          const stripe = getStripeClient();
-          await stripe.subscriptions.cancel(activeSub.stripeSubscriptionId);
-          await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, { status: 'canceled' });
-          console.log(`Canceled existing subscription ${activeSub.stripeSubscriptionId} after lifetime purchase`);
-        }
-      } catch (cancelErr: any) {
-        console.error('Failed to cancel existing subscription after lifetime purchase:', cancelErr.message);
+      const activeSub = await storage.getActiveSubscription(user.id);
+      if (activeSub && activeSub.plan.key !== GROWTH_PLAN_KEY && activeSub.stripeSubscriptionId) {
+        await getStripeClient().subscriptions.cancel(activeSub.stripeSubscriptionId);
+        await storage.cancelSubscriptionAndFallback(activeSub.stripeSubscriptionId);
       }
-
       return;
     }
 
-    if (!stripeSubscriptionId) {
-      console.log('Checkout: Missing subscription ID for subscription-mode checkout');
-      return;
-    }
-
-    const checkoutPlan = await storage.getPlanById(planId);
-    if (!checkoutPlan || (metadata.planKey && checkoutPlan.key !== metadata.planKey)) {
-      throw new Error(`Checkout plan metadata did not match a configured plan`);
-    }
-
-    const existingSub = await storage.getSubscriptionByStripeId(stripeSubscriptionId);
-    if (existingSub) {
-      console.log(`Subscription already exists for ${stripeSubscriptionId}, skipping creation`);
-      return;
-    }
-
-    let periodStart: Date = new Date();
-    let periodEnd: Date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    let subscriptionStatus = 'active';
-
-    try {
-      const stripe = getStripeClient();
-      const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-      const subAny = stripeSub as any;
-      subscriptionStatus = subAny.status || subscriptionStatus;
-      const itemData = subAny.items?.data?.[0];
-      if (itemData?.price?.id !== checkoutPlan.stripePriceId) {
-        throw new Error(`Checkout subscription price did not match the configured plan`);
-      }
-      const parsedStart = parseStripeDate(subAny.current_period_start)
-        || parseStripeDate(itemData?.current_period_start)
-        || parseStripeDate(subAny.start_date);
-      const parsedEnd = parseStripeDate(subAny.current_period_end)
-        || parseStripeDate(itemData?.current_period_end);
-      if (parsedStart) periodStart = parsedStart;
-      if (parsedEnd) periodEnd = parsedEnd;
-      
-    } catch (err: any) {
-      console.error('Failed to retrieve subscription from Stripe:', err.message);
-      throw err;
-    }
-
-    await storage.createSubscription({
-      userId: user.id,
-      planId,
-      stripeSubscriptionId,
-      status: subscriptionStatus,
-      currentPeriodStart: periodStart,
-      currentPeriodEnd: periodEnd,
-      cancelAtPeriodEnd: false,
-    });
-
-    if (!user.planType?.startsWith('lifetime') && ['active', 'trialing'].includes(subscriptionStatus)) {
-      await storage.updateUserPlanType(user.id, planTypeForPlan(checkoutPlan));
-    }
+    const subscriptionId = idOf(data.subscription);
+    if (!subscriptionId) throw new Error("Subscription checkout session has no subscription");
+    await reconcileStripeSubscription(subscriptionId, customerId);
   }
 
-  static async handleSubscriptionUpdated(data: any): Promise<void> {
-    const stripeSubId = data.id;
-    const status = data.status;
-    const cancelAtPeriodEnd = data.cancel_at_period_end ?? false;
-    const customerId = data.customer;
-
-    
-
-    const existing = await storage.getSubscriptionByStripeId(stripeSubId);
-    if (!existing) {
-      console.log(`Webhook: No local subscription found for ${stripeSubId}, attempting to create from event data`);
-
-      if (customerId && (status === 'active' || status === 'trialing')) {
-        const user = await storage.getUserByStripeCustomerId(customerId);
-        if (user) {
-          const plans = await storage.getPlans();
-          const priceId = data.items?.data?.[0]?.price?.id || data.plan?.id;
-          const matchedPlan = findPlanByStripePriceId(plans, priceId);
-
-          if (matchedPlan) {
-            const evtItemData = data.items?.data?.[0];
-            const periodStart = parseStripeDate(data.current_period_start)
-              || parseStripeDate(evtItemData?.current_period_start)
-              || parseStripeDate(data.start_date)
-              || new Date();
-            const periodEnd = parseStripeDate(data.current_period_end)
-              || parseStripeDate(evtItemData?.current_period_end)
-              || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-            await storage.createSubscription({
-              userId: user.id,
-              planId: matchedPlan.id,
-              stripeSubscriptionId: stripeSubId,
-              status,
-              currentPeriodStart: periodStart,
-              currentPeriodEnd: periodEnd,
-              cancelAtPeriodEnd,
-            });
-
-            if (!user.planType?.startsWith('lifetime')) {
-              await storage.updateUserPlanType(user.id, planTypeForPlan(matchedPlan));
-            }
-          }
-        }
-      }
-      return;
-    }
-
-    const updateData: any = {
-      status,
-      cancelAtPeriodEnd,
-    };
-
-    const itemData = data.items?.data?.[0];
-    const parsedStart = parseStripeDate(data.current_period_start)
-      || parseStripeDate(itemData?.current_period_start)
-      || parseStripeDate(data.start_date);
-    const parsedEnd = parseStripeDate(data.current_period_end)
-      || parseStripeDate(itemData?.current_period_end);
-    if (parsedStart) updateData.currentPeriodStart = parsedStart;
-    if (parsedEnd) updateData.currentPeriodEnd = parsedEnd;
-
-    const priceId = itemData?.price?.id || data.plan?.id;
-    if (priceId) {
-      const plans = await storage.getPlans();
-      const matchedPlan = plans.find(p => p.stripePriceId === priceId);
-      if (matchedPlan && matchedPlan.id !== existing.planId) {
-        updateData.planId = matchedPlan.id;
-      }
-    }
-
-    await storage.updateSubscriptionByStripeId(stripeSubId, updateData);
-
-    if (customerId && updateData.planId) {
-      const user = await storage.getUserByStripeCustomerId(customerId);
-      if (user && !user.planType?.startsWith('lifetime')) {
-        const plans = await storage.getPlans();
-        const newPlan = plans.find(p => p.id === updateData.planId);
-        if (newPlan) {
-          await storage.updateUserPlanType(user.id, planTypeForPlan(newPlan));
-        }
-      }
-    }
-
-    if (customerId && !['active', 'trialing'].includes(status)) {
-      const user = await storage.getUserByStripeCustomerId(customerId);
-      if (user && !user.planType?.startsWith('lifetime')) await storage.updateUserPlanType(user.id, 'none');
-    }
-  }
-
-  static async handleSubscriptionDeleted(data: any): Promise<void> {
-    const stripeSubId = data.id;
-    const customerId = data.customer;
-
-    const existing = await storage.getSubscriptionByStripeId(stripeSubId);
-    if (!existing) {
-      console.log(`Webhook: No local subscription found for ${stripeSubId}`);
-      return;
-    }
-
-    await storage.updateSubscriptionByStripeId(stripeSubId, {
-      status: 'canceled',
-      cancelAtPeriodEnd: false,
-    });
-
-    if (customerId) {
-      const user = await storage.getUserByStripeCustomerId(customerId);
-      if (user && !user.planType?.startsWith('lifetime')) {
-        await storage.updateUserPlanType(user.id, 'none');
-      }
-    }
+  static async handleSubscriptionChanged(data: any): Promise<void> {
+    const subscriptionId = idOf(data);
+    if (!subscriptionId) throw new Error("Stripe subscription event has no subscription ID");
+    await reconcileStripeSubscription(subscriptionId, idOf(data.customer));
   }
 }

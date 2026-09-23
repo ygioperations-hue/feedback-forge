@@ -1,13 +1,25 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+
+async function applyMigrations(db: any, sql: any) {
+  for (const name of ["0001_monthly_usage.sql", "0002_growth_plan.sql", "0003_production_hardening.sql"]) {
+    await db.execute(sql.raw(fs.readFileSync(new URL(`../migrations/${name}`, import.meta.url), "utf8")));
+  }
+}
+
+after(async () => {
+  if (!process.env.TEST_DATABASE_URL) return;
+  const { pool } = await import("../server/storage");
+  await pool.end();
+});
 
 test("monthly usage integration (requires TEST_DATABASE_URL with the app schema)", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
-  const { db, storage, ensureMonthlyUsage, ensureGrowthPlan, MonthlyLimitError, monthWindow } = await import("../server/storage");
+  const { db, storage, MonthlyLimitError, monthWindow } = await import("../server/storage");
   const { users, projects, questions, responses, monthlyUsage } = await import("../shared/schema");
   const { eq, sql } = await import("drizzle-orm");
-  await ensureGrowthPlan();
-  await ensureMonthlyUsage();
+  await applyMigrations(db, sql);
 
   const key = crypto.randomUUID();
   const [user] = await db.insert(users).values({ email: `${key}@example.test`, password: "test", firstName: "Quota", lastName: "Test", planType: "lifetime_pro" }).returning();
@@ -20,8 +32,8 @@ test("monthly usage integration (requires TEST_DATABASE_URL with the app schema)
   try {
     // Existing responses are included by the idempotent backfill.
     const [legacy] = await db.insert(responses).values({ projectId: projectA.id }).returning();
-    await ensureMonthlyUsage();
-    await ensureMonthlyUsage();
+    await db.execute(sql.raw(fs.readFileSync(new URL("../migrations/0001_monthly_usage.sql", import.meta.url), "utf8")));
+    await db.execute(sql.raw(fs.readFileSync(new URL("../migrations/0001_monthly_usage.sql", import.meta.url), "utf8")));
     assert.equal(await storage.getMonthlyUsage(user.id), 1);
     const [backfilled] = await db.select({ count: sql<number>`count(*)::int` }).from(monthlyUsage).where(eq(monthlyUsage.responseId, legacy.id));
     assert.equal(backfilled.count, 1);
@@ -77,10 +89,10 @@ test("monthly usage integration (requires TEST_DATABASE_URL with the app schema)
 
 test("Growth counts responses only and falls back to retained Lifetime (requires TEST_DATABASE_URL)", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
-  const { db, storage, ensureGrowthPlan, MonthlyLimitError } = await import("../server/storage");
+  const { db, storage, MonthlyLimitError } = await import("../server/storage");
   const { users, projects, monthlyUsage, subscriptions } = await import("../shared/schema");
   const { eq, sql } = await import("drizzle-orm");
-  await ensureGrowthPlan();
+  await applyMigrations(db, sql);
   const growthPlan = await storage.getPlanByKey("growth_monthly");
   assert.ok(growthPlan);
 
@@ -91,12 +103,27 @@ test("Growth counts responses only and falls back to retained Lifetime (requires
   const subscriptionId = `sub_${key}`;
 
   try {
+    const checkoutExpiry = new Date(Date.now() + 31 * 60_000);
+    const checkoutClaims = await Promise.all([
+      storage.claimGrowthCheckout(user.id, checkoutExpiry),
+      storage.claimGrowthCheckout(user.id, checkoutExpiry),
+    ]);
+    assert.equal(checkoutClaims.filter(claim => claim.created).length, 1);
+    assert.equal(checkoutClaims[0].attempt?.attemptId, checkoutClaims[1].attempt?.attemptId);
+    const attemptId = checkoutClaims[0].attempt?.attemptId;
+    assert.ok(attemptId);
+    await storage.setGrowthCheckoutSession(user.id, attemptId, `cs_${key}`);
+    const reusedClaim = await storage.claimGrowthCheckout(user.id, checkoutExpiry);
+    assert.equal(reusedClaim.attempt?.stripeSessionId, `cs_${key}`);
+    await storage.clearGrowthCheckout(user.id);
+
     // A response collected before upgrading still counts in the same UTC month.
     await storage.createResponse({ projectId: projectA.id }, [], user.id);
     await storage.createSubscription({ userId: user.id, planId: growthPlan.id, stripeSubscriptionId: subscriptionId, status: "active", currentPeriodStart: new Date(), currentPeriodEnd: new Date(Date.now() + 30 * 86400_000), cancelAtPeriodEnd: false });
     await storage.createSubscription({ userId: user.id, planId: growthPlan.id, stripeSubscriptionId: subscriptionId, status: "active", currentPeriodStart: new Date(), currentPeriodEnd: new Date(Date.now() + 30 * 86400_000), cancelAtPeriodEnd: false });
     const [subscriptionCount] = await db.select({ count: sql<number>`count(*)::int` }).from(subscriptions).where(eq(subscriptions.stripeSubscriptionId, subscriptionId));
     assert.equal(subscriptionCount.count, 1);
+    assert.equal((await storage.claimGrowthCheckout(user.id, checkoutExpiry)).activeSubscription, true);
     const entitlement = await storage.getUsageEntitlement(user.id);
     assert.deepEqual([entitlement?.effectivePlan, entitlement?.responseLimit, entitlement?.aiInsightLimit], ["growth", 500, null]);
 
@@ -136,5 +163,49 @@ test("Growth counts responses only and falls back to retained Lifetime (requires
     await assert.rejects(storage.reserveInsightRun(user.id), MonthlyLimitError);
   } finally {
     await db.delete(users).where(eq(users.id, user.id));
+  }
+});
+
+test("production hardening migration refuses legacy user entitlements (requires TEST_DATABASE_URL)", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  const { db } = await import("../server/storage");
+  const { users, plans } = await import("../shared/schema");
+  const { eq, sql } = await import("drizzle-orm");
+  await applyMigrations(db, sql);
+  const key = crypto.randomUUID();
+  const [legacyPlan] = await db.insert(plans).values({ key: `legacy_test_${key}`, name: "Monthly", price: 2900, interval: "month" }).returning();
+  const [legacyUser] = await db.insert(users).values({ email: `${key}@legacy.test`, password: "test", firstName: "Legacy", lastName: "Test", planType: "monthly" }).returning();
+  try {
+    const migration = fs.readFileSync(new URL("../migrations/0003_production_hardening.sql", import.meta.url), "utf8");
+    await assert.rejects(db.execute(sql.raw(migration)), /monthly or yearly plan types/);
+  } finally {
+    await db.delete(users).where(eq(users.id, legacyUser.id));
+    await db.delete(plans).where(eq(plans.id, legacyPlan.id));
+  }
+});
+
+test("production hardening migration refuses legacy subscriptions (requires TEST_DATABASE_URL)", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  const { db } = await import("../server/storage");
+  const { users, plans, subscriptions } = await import("../shared/schema");
+  const { eq, sql } = await import("drizzle-orm");
+  await applyMigrations(db, sql);
+  const key = crypto.randomUUID();
+  const [legacyPlan] = await db.insert(plans).values({ key: "legacy_monthly", name: "Monthly", price: 2900, interval: "month" }).returning();
+  const [legacyUser] = await db.insert(users).values({ email: `${key}@legacy-sub.test`, password: "test", firstName: "Legacy", lastName: "Subscriber", planType: "none" }).returning();
+  const [legacySubscription] = await db.insert(subscriptions).values({
+    userId: legacyUser.id,
+    planId: legacyPlan.id,
+    stripeSubscriptionId: `sub_legacy_${key}`,
+    status: "canceled",
+    cancelAtPeriodEnd: false,
+  }).returning();
+  try {
+    const migration = fs.readFileSync(new URL("../migrations/0003_production_hardening.sql", import.meta.url), "utf8");
+    await assert.rejects(db.execute(sql.raw(migration)), /subscription rows still reference/);
+  } finally {
+    await db.delete(subscriptions).where(eq(subscriptions.id, legacySubscription.id));
+    await db.delete(users).where(eq(users.id, legacyUser.id));
+    await db.delete(plans).where(eq(plans.id, legacyPlan.id));
   }
 });

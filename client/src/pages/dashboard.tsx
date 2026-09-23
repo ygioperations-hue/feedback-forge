@@ -137,9 +137,9 @@ function DashboardContent() {
                 {trialDaysRemaining} {trialDaysRemaining === 1 ? "day" : "days"} remaining with full access.
               </p>
             </div>
-            <a href="/#pricing">
-              <Button variant="outline" data-testid="button-trial-upgrade">Upgrade to Lifetime Access</Button>
-            </a>
+            <Button variant="outline" onClick={() => growthCheckout.mutate()} disabled={growthCheckout.isPending} data-testid="button-trial-upgrade">
+              {growthCheckout.isPending ? "Redirecting..." : "Upgrade to Growth — $19/month"}
+            </Button>
           </CardContent>
         </Card>
       )}

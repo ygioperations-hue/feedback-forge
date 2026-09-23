@@ -39,9 +39,6 @@ export function resolveUsageEntitlement(
   if (activeSubscriptionPlanKey === GROWTH_PLAN_KEY) {
     return { activated: true, basePlan, effectivePlan: "growth", responseLimit: GROWTH_MONTHLY_RESPONSE_LIMIT, aiInsightLimit: null, sharedLifetimeLimit: false, trialActive: false, trialEnded: false };
   }
-  if (activeSubscriptionPlanKey?.startsWith("legacy_") || basePlan === "monthly" || basePlan === "yearly") {
-    return { activated: true, basePlan, effectivePlan: basePlan === "yearly" ? "yearly" : "monthly", responseLimit: null, aiInsightLimit: null, sharedLifetimeLimit: false, trialActive: false, trialEnded: false };
-  }
   if (basePlan.startsWith("lifetime")) {
     return { activated: true, basePlan, effectivePlan: basePlan, responseLimit: LIFETIME_MONTHLY_LIMIT, aiInsightLimit: LIFETIME_MONTHLY_LIMIT, sharedLifetimeLimit: true, trialActive: false, trialEnded: false };
   }

@@ -111,21 +111,6 @@ export default function Billing() {
     },
   });
 
-  const switchMutation = useMutation({
-    mutationFn: async (plan: "monthly" | "yearly") => {
-      const res = await apiRequest("POST", "/api/billing/switch", { plan });
-      return res.json();
-    },
-    onSuccess: (data) => {
-      toast({ title: "Plan switched", description: data.message });
-      queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
   const reactivateMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/billing/reactivate");

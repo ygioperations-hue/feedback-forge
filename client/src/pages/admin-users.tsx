@@ -26,8 +26,6 @@ function planBadgeVariant(planType: string) {
   switch (planType) {
     case "lifetime_starter":
     case "lifetime_pro": return "default";
-    case "yearly": return "secondary";
-    case "monthly": return "outline";
     case "growth": return "secondary";
     default: return "destructive";
   }
@@ -37,8 +35,6 @@ function planLabel(planType: string) {
   switch (planType) {
     case "lifetime_starter": return "Starter Lifetime";
     case "lifetime_pro": return "Pro Lifetime";
-    case "monthly": return "Monthly";
-    case "yearly": return "Yearly";
     case "growth": return "Growth";
     case "none": return "None";
     default: return planType;
