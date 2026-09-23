@@ -1,7 +1,16 @@
-# Production deployment
+# Railway deployment
 
 Use Node 22. Never run database integration tests or `npm run db:push` against staging or production.
 Use PostgreSQL 17 command-line clients for Railway PostgreSQL 17; an older `pg_dump` refuses to back up a newer server.
+
+`railway.json` defines the release lifecycle for the application service:
+
+1. Railway builds with `npm run build`.
+2. Railway runs `npm run db:migrate` in a pre-deploy container with the service variables.
+3. A migration failure stops the release and leaves the previous deployment active.
+4. Railway starts the application with `npm start` and checks `/api/health`.
+
+The application service must define `DATABASE_URL`, normally as a reference to `${{Postgres.DATABASE_URL}}`. A local `.env` file is never uploaded to Railway.
 
 ## 1. Local release checks
 
@@ -31,7 +40,7 @@ For the matching test or live Stripe environment:
 
 Do not migrate if a legacy Stripe subscription exists.
 
-## 3. Database preflight and backup
+## 3. Production database preflight and backup
 
 Read the database URL without putting it in shell history:
 
@@ -54,25 +63,21 @@ pg_dump "$DEPLOY_DATABASE_URL" \
   --file="/tmp/feedback-$(date -u +%Y%m%dT%H%M%SZ).dump"
 ```
 
-## 4. Migrate
+## 4. Automatic migration
 
-Stop or drain all old application instances before applying the backfill. Run all migrations in one transaction:
+The Railway pre-deploy command runs:
 
 ```bash
-psql "$DEPLOY_DATABASE_URL" -X -v ON_ERROR_STOP=1 --single-transaction \
-  -f migrations/0001_monthly_usage.sql \
-  -f migrations/0002_growth_plan.sql \
-  -f migrations/0003_production_hardening.sql
-
-psql "$DEPLOY_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
-  -f scripts/verify-production-schema.sql
+npm run db:migrate
 ```
 
-Migration `0003` aborts when a legacy user or subscription exists. Resolve the legacy record and restart the complete transaction instead of bypassing the guard.
+The runner acquires a PostgreSQL advisory lock, executes the preflight, applies each previously unapplied migration, records its SHA-256 checksum in `app_schema_migrations`, and executes the schema verification in the same transaction. A changed checksum or failed assertion rolls back the transaction and exits nonzero.
+
+Migration `0003` aborts when a legacy user or subscription exists. Resolve the legacy record and redeploy instead of bypassing the guard. For the first production rollout of the usage ledger, pause or drain old application writers before triggering the deployment so responses cannot arrive after the historical backfill but before the new application takes over.
 
 ## 5. Deploy and smoke test
 
-Deploy the exact commit and build artifact tested in staging. Set `NODE_ENV=production`, use Node 22, and start with `npm start`.
+Merge the exact commit tested in staging into the branch connected to the Railway environment. The push triggers build, migration, health check, and deployment automatically.
 
 ```bash
 curl -fsS "$DEPLOY_BASE_URL/" >/dev/null

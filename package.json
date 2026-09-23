@@ -12,6 +12,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test": "node --import tsx tests/run.ts",
+    "db:migrate": "node scripts/migrate.mjs",
     "db:push": "drizzle-kit push",
     "db:seed": "NODE_ENV=development tsx server/seed-runner.ts"
   },

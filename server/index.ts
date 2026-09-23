@@ -22,6 +22,10 @@ const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 app.use(
   helmet({
     contentSecurityPolicy: false,
