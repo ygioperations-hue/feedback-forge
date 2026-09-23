@@ -260,27 +260,26 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="mt-16 sm:mt-20 grid grid-cols-2 sm:grid-cols-4 gap-6 max-w-2xl mx-auto">
-            <div className="flex flex-col items-center gap-1 text-center">
-              <Users className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-fact-trial">7-Day</span>
-              <span className="text-xs text-muted-foreground">Free Trial</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 text-center">
-              <BarChart3 className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-fact-lifetime-price">$59 One-Time</span>
-              <span className="text-xs text-muted-foreground">Lifetime Access</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 text-center">
-              <Star className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-fact-no-recurring-fees">No recurring fees</span>
-              <span className="text-xs text-muted-foreground">ever</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 text-center">
-              <Shield className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-fact-ai-insights">AI-powered insights</span>
-              <span className="text-xs text-muted-foreground">(GPT-4o)</span>
-            </div>
+          <div className="mt-16 sm:mt-20 max-w-4xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-y-10 lg:gap-y-0 lg:divide-x lg:divide-border">
+            {[
+              { icon: Users, value: "7 days", label: "Free trial", id: "trial" },
+              { icon: BarChart3, value: "$59", label: "One-time, lifetime access", id: "lifetime-price" },
+              { icon: Star, value: "$0", label: "Recurring fees, ever", id: "no-recurring-fees" },
+              { icon: Shield, value: "GPT-4o", label: "AI-powered insights", id: "ai-insights" },
+            ].map(({ icon: Icon, value, label, id }) => (
+              <div key={id} className="flex flex-col items-center text-center px-4">
+                <Icon className="w-5 h-5 text-primary mb-3" />
+                <span
+                  className="text-3xl sm:text-4xl font-bold tracking-tight whitespace-nowrap"
+                  data-testid={`text-fact-${id}`}
+                >
+                  {value}
+                </span>
+                <span className="mt-1.5 text-sm text-muted-foreground leading-snug max-w-[12rem]">
+                  {label}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
