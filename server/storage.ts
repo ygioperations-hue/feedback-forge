@@ -1,13 +1,16 @@
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, gte, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import { assertWithinLimit, resolveUsageEntitlement, GROWTH_PLAN_KEY, type UsageEntitlement } from "./monthlyQuota";
 import {
   users,
   plans,
   subscriptions,
+  growthCheckoutAttempts,
   projects,
   questions,
   responses,
+  monthlyUsage,
   answers,
   roadmapItems,
   changelogItems,
@@ -15,10 +18,10 @@ import {
   type User,
   type InsertUser,
   type Plan,
-  type InsertPlan,
   type Subscription,
   type InsertSubscription,
   type SubscriptionWithPlan,
+  type GrowthCheckoutAttempt,
   type Project,
   type InsertProject,
   type Question,
@@ -36,14 +39,40 @@ import {
   type ResponseWithAnswers,
 } from "@shared/schema";
 
-const pool = new pg.Pool({
+export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
 export const db = drizzle(pool);
 
+export { LIFETIME_MONTHLY_LIMIT, GROWTH_MONTHLY_RESPONSE_LIMIT, MonthlyLimitError, monthWindow } from "./monthlyQuota";
+import { monthWindow } from "./monthlyQuota";
+
+async function countMonthlyUsage(client: Pick<typeof db, "select">, userId: string, kind?: "response" | "insight", now = new Date()): Promise<number> {
+  const { start, end } = monthWindow(now);
+  const pendingCutoff = new Date(now.getTime() - 30 * 60 * 1000);
+  const filters = [eq(monthlyUsage.userId, userId), gte(monthlyUsage.occurredAt, start), lt(monthlyUsage.occurredAt, end),
+    sql`(${monthlyUsage.status} = 'complete' OR (${monthlyUsage.status} = 'pending' AND ${monthlyUsage.occurredAt} >= ${pendingCutoff}))`];
+  if (kind) filters.push(eq(monthlyUsage.kind, kind));
+  const [result] = await client.select({ count: sql<number>`count(*)::int` }).from(monthlyUsage)
+    .where(and(...filters));
+  return result.count;
+}
+
+async function resolveEntitlement(client: any, user: User): Promise<UsageEntitlement> {
+  const [active] = await client.select({ key: plans.key }).from(subscriptions)
+    .innerJoin(plans, eq(subscriptions.planId, plans.id))
+    .where(and(eq(subscriptions.userId, user.id), sql`${subscriptions.status} IN ('active', 'trialing')`))
+    .orderBy(sql`${subscriptions.createdAt} DESC`).limit(1);
+  return resolveUsageEntitlement(user, active?.key);
+}
+
+async function usageForEntitlement(client: any, userId: string, entitlement: UsageEntitlement, kind: "response" | "insight") {
+  return countMonthlyUsage(client, userId, entitlement.sharedLifetimeLimit ? undefined : kind);
+}
+
 export interface IStorage {
-  createUser(user: InsertUser): Promise<User>;
+  createUser(user: InsertUser & Partial<Pick<User, "planType" | "trialEndsAt">>): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
   updateUserPassword(id: string, hashedPassword: string): Promise<void>;
@@ -54,8 +83,7 @@ export interface IStorage {
 
   getPlans(): Promise<Plan[]>;
   getPlanById(id: string): Promise<Plan | undefined>;
-  getPlanByInterval(interval: string): Promise<Plan | undefined>;
-  createPlan(plan: InsertPlan): Promise<Plan>;
+  getPlanByKey(key: string): Promise<Plan | undefined>;
   updatePlanStripePriceId(id: string, stripePriceId: string): Promise<Plan>;
 
   getActiveSubscription(userId: string): Promise<SubscriptionWithPlan | undefined>;
@@ -63,6 +91,11 @@ export interface IStorage {
   createSubscription(sub: InsertSubscription): Promise<Subscription>;
   updateSubscriptionByStripeId(stripeSubId: string, data: Partial<Pick<Subscription, "status" | "currentPeriodStart" | "currentPeriodEnd" | "cancelAtPeriodEnd" | "planId">>): Promise<Subscription | undefined>;
   getSubscriptionByStripeId(stripeSubId: string): Promise<Subscription | undefined>;
+  claimGrowthCheckout(userId: string, expiresAt: Date): Promise<{ attempt?: GrowthCheckoutAttempt; created: boolean; activeSubscription: boolean }>;
+  setGrowthCheckoutSession(userId: string, attemptId: string, stripeSessionId: string): Promise<GrowthCheckoutAttempt | undefined>;
+  clearGrowthCheckout(userId: string): Promise<void>;
+  applyGrowthSubscription(sub: InsertSubscription): Promise<Subscription>;
+  cancelSubscriptionAndFallback(stripeSubId: string): Promise<Subscription | undefined>;
 
   getProjects(userId: string): Promise<Project[]>;
   getProject(id: string): Promise<ProjectWithQuestions | undefined>;
@@ -73,7 +106,13 @@ export interface IStorage {
   getResponses(userId: string): Promise<(FeedbackResponse & { answers: Answer[] })[]>;
   getResponse(id: string): Promise<(FeedbackResponse & { answers: (Answer & { question: Question })[] }) | undefined>;
   getResponsesByProject(projectId: string): Promise<ResponseWithAnswers[]>;
-  createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[]): Promise<FeedbackResponse>;
+  createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[], ownerId?: string): Promise<FeedbackResponse>;
+  getMonthlyUsage(userId: string): Promise<number>;
+  getMonthlyUsageBreakdown(userId: string): Promise<{ responses: number; insights: number; total: number }>;
+  getUsageEntitlement(userId: string): Promise<UsageEntitlement | undefined>;
+  reserveInsightRun(userId: string): Promise<string>;
+  completeInsightRun(id: string): Promise<void>;
+  releaseInsightRun(id: string): Promise<void>;
   getOrCreateWidgetQuestions(projectId: string): Promise<{ ratingId: string; categoryId: string; messageId: string }>;
   getRoadmapItemsByProject(projectId: string): Promise<RoadmapItem[]>;
   createRoadmapItem(item: InsertRoadmapItem): Promise<RoadmapItem>;
@@ -112,7 +151,46 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async createUser(user: InsertUser): Promise<User> {
+  async getMonthlyUsage(userId: string): Promise<number> {
+    return countMonthlyUsage(db, userId);
+  }
+
+  async getMonthlyUsageBreakdown(userId: string) {
+    const [responsesUsed, insightsUsed] = await Promise.all([
+      countMonthlyUsage(db, userId, "response"),
+      countMonthlyUsage(db, userId, "insight"),
+    ]);
+    return { responses: responsesUsed, insights: insightsUsed, total: responsesUsed + insightsUsed };
+  }
+
+  async getUsageEntitlement(userId: string): Promise<UsageEntitlement | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    return user ? resolveEntitlement(db, user) : undefined;
+  }
+
+  async reserveInsightRun(userId: string): Promise<string> {
+    return db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+      if (!user) throw new Error("User not found");
+      const entitlement = await resolveEntitlement(tx, user);
+      const used = await usageForEntitlement(tx, userId, entitlement, "insight");
+      assertWithinLimit(entitlement.aiInsightLimit, used);
+      const [usage] = await tx.insert(monthlyUsage).values({ userId, kind: "insight", status: "pending" }).returning({ id: monthlyUsage.id });
+      return usage.id;
+    });
+  }
+
+  async completeInsightRun(id: string): Promise<void> {
+    const [usage] = await db.update(monthlyUsage).set({ status: "complete" })
+      .where(and(eq(monthlyUsage.id, id), eq(monthlyUsage.status, "pending"), gte(monthlyUsage.occurredAt, new Date(Date.now() - 30 * 60 * 1000))))
+      .returning({ id: monthlyUsage.id });
+    if (!usage) throw new Error("AI summary took too long. Please try again.");
+  }
+
+  async releaseInsightRun(id: string): Promise<void> {
+    await db.delete(monthlyUsage).where(and(eq(monthlyUsage.id, id), eq(monthlyUsage.kind, "insight")));
+  }
+  async createUser(user: InsertUser & Partial<Pick<User, "planType" | "trialEndsAt">>): Promise<User> {
     const [created] = await db.insert(users).values(user).returning();
     return created;
   }
@@ -161,14 +239,9 @@ export class DatabaseStorage implements IStorage {
     return plan;
   }
 
-  async getPlanByInterval(interval: string): Promise<Plan | undefined> {
-    const [plan] = await db.select().from(plans).where(eq(plans.interval, interval));
+  async getPlanByKey(key: string): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.key, key));
     return plan;
-  }
-
-  async createPlan(plan: InsertPlan): Promise<Plan> {
-    const [created] = await db.insert(plans).values(plan).returning();
-    return created;
   }
 
   async updatePlanStripePriceId(id: string, stripePriceId: string): Promise<Plan> {
@@ -208,25 +281,134 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSubscription(sub: InsertSubscription): Promise<Subscription> {
-    const [created] = await db.insert(subscriptions).values(sub).returning();
-    return created;
+    return db.transaction(async (tx) => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, sub.userId)).for("update");
+      const [created] = await tx.insert(subscriptions).values(sub)
+        .onConflictDoUpdate({
+          target: subscriptions.stripeSubscriptionId,
+          set: {
+            planId: sub.planId,
+            status: sub.status,
+            currentPeriodStart: sub.currentPeriodStart,
+            currentPeriodEnd: sub.currentPeriodEnd,
+            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+          },
+        }).returning();
+      return created;
+    });
   }
 
   async updateSubscriptionByStripeId(
     stripeSubId: string,
     data: Partial<Pick<Subscription, "status" | "currentPeriodStart" | "currentPeriodEnd" | "cancelAtPeriodEnd" | "planId">>
   ): Promise<Subscription | undefined> {
-    const [updated] = await db
-      .update(subscriptions)
-      .set(data)
-      .where(eq(subscriptions.stripeSubscriptionId, stripeSubId))
-      .returning();
-    return updated;
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(subscriptions).where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+      if (!existing) return undefined;
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, existing.userId)).for("update");
+      const [updated] = await tx.update(subscriptions).set(data).where(eq(subscriptions.stripeSubscriptionId, stripeSubId)).returning();
+      return updated;
+    });
   }
 
   async getSubscriptionByStripeId(stripeSubId: string): Promise<Subscription | undefined> {
     const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
     return sub;
+  }
+
+  async claimGrowthCheckout(userId: string, expiresAt: Date) {
+    return db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+      if (!user) throw new Error("User not found");
+
+      const [active] = await tx.select({ id: subscriptions.id }).from(subscriptions)
+        .where(and(eq(subscriptions.userId, userId), sql`${subscriptions.status} IN ('active', 'trialing')`))
+        .limit(1);
+      if (active) {
+        const [attempt] = await tx.select().from(growthCheckoutAttempts).where(eq(growthCheckoutAttempts.userId, userId));
+        return { attempt, created: false, activeSubscription: true };
+      }
+
+      const [existing] = await tx.select().from(growthCheckoutAttempts).where(eq(growthCheckoutAttempts.userId, userId));
+      if (existing && existing.expiresAt > new Date()) {
+        return { attempt: existing, created: false, activeSubscription: false };
+      }
+      if (existing) await tx.delete(growthCheckoutAttempts).where(eq(growthCheckoutAttempts.userId, userId));
+
+      const [attempt] = await tx.insert(growthCheckoutAttempts).values({ userId, expiresAt }).returning();
+      return { attempt, created: true, activeSubscription: false };
+    });
+  }
+
+  async setGrowthCheckoutSession(userId: string, attemptId: string, stripeSessionId: string) {
+    const [attempt] = await db.update(growthCheckoutAttempts).set({ stripeSessionId })
+      .where(and(eq(growthCheckoutAttempts.userId, userId), eq(growthCheckoutAttempts.attemptId, attemptId)))
+      .returning();
+    return attempt;
+  }
+
+  async clearGrowthCheckout(userId: string): Promise<void> {
+    await db.delete(growthCheckoutAttempts).where(eq(growthCheckoutAttempts.userId, userId));
+  }
+
+  async applyGrowthSubscription(sub: InsertSubscription): Promise<Subscription> {
+    const stripeSubId = sub.stripeSubscriptionId;
+    if (!stripeSubId) throw new Error("Growth subscription requires a Stripe subscription ID");
+    return db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.id, sub.userId)).for("update");
+      if (!user) throw new Error("User not found");
+      const [existing] = await tx.select().from(subscriptions).where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+      if (existing && existing.userId !== sub.userId) {
+        throw new Error("Stripe subscription belongs to a different local user");
+      }
+      const [saved] = await tx.insert(subscriptions).values(sub)
+        .onConflictDoUpdate({
+          target: subscriptions.stripeSubscriptionId,
+          set: {
+            planId: sub.planId,
+            status: sub.status,
+            currentPeriodStart: sub.currentPeriodStart,
+            currentPeriodEnd: sub.currentPeriodEnd,
+            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+          },
+        }).returning();
+      if (!user.planType.startsWith("lifetime")) {
+        let planType = ["active", "trialing"].includes(saved.status) ? "growth" : "none";
+        if (planType === "none") {
+          const [otherActive] = await tx.select({ id: subscriptions.id }).from(subscriptions)
+            .where(and(
+              eq(subscriptions.userId, user.id),
+              sql`${subscriptions.stripeSubscriptionId} <> ${stripeSubId}`,
+              sql`${subscriptions.status} IN ('active', 'trialing')`,
+            )).limit(1);
+          if (otherActive) planType = "growth";
+        }
+        await tx.update(users).set({ planType }).where(eq(users.id, user.id));
+      }
+      await tx.delete(growthCheckoutAttempts).where(eq(growthCheckoutAttempts.userId, user.id));
+      return saved;
+    });
+  }
+
+  async cancelSubscriptionAndFallback(stripeSubId: string): Promise<Subscription | undefined> {
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(subscriptions).where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+      if (!existing) return undefined;
+      const [user] = await tx.select().from(users).where(eq(users.id, existing.userId)).for("update");
+      const [updated] = await tx.update(subscriptions).set({ status: "canceled", cancelAtPeriodEnd: false })
+        .where(eq(subscriptions.stripeSubscriptionId, stripeSubId)).returning();
+      if (user && !user.planType.startsWith("lifetime")) {
+        const [otherActive] = await tx.select({ id: subscriptions.id }).from(subscriptions)
+          .where(and(
+            eq(subscriptions.userId, user.id),
+            sql`${subscriptions.stripeSubscriptionId} <> ${stripeSubId}`,
+            sql`${subscriptions.status} IN ('active', 'trialing')`,
+          )).limit(1);
+        await tx.update(users).set({ planType: otherActive ? "growth" : "none" }).where(eq(users.id, user.id));
+      }
+      await tx.delete(growthCheckoutAttempts).where(eq(growthCheckoutAttempts.userId, existing.userId));
+      return updated;
+    });
   }
 
   async getProjects(userId: string): Promise<Project[]> {
@@ -309,14 +491,24 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[]): Promise<FeedbackResponse> {
-    const [created] = await db.insert(responses).values(response).returning();
-    if (answersList.length > 0) {
-      await db.insert(answers).values(
-        answersList.map((a) => ({ ...a, responseId: created.id }))
-      );
-    }
-    return created;
+  async createResponse(response: InsertResponse, answersList: Omit<InsertAnswer, "responseId">[], ownerId?: string): Promise<FeedbackResponse> {
+    return db.transaction(async (tx) => {
+      if (ownerId) {
+        const [user] = await tx.select().from(users).where(eq(users.id, ownerId)).for("update");
+        if (!user) throw new Error("User not found");
+        const entitlement = await resolveEntitlement(tx, user);
+        const used = await usageForEntitlement(tx, ownerId, entitlement, "response");
+        assertWithinLimit(entitlement.responseLimit, used);
+      }
+      const [created] = await tx.insert(responses).values(response).returning();
+      if (answersList.length) {
+        await tx.insert(answers).values(answersList.map((a) => ({ ...a, responseId: created.id })));
+      }
+      if (ownerId) {
+        await tx.insert(monthlyUsage).values({ userId: ownerId, kind: "response", responseId: created.id, occurredAt: created.submittedAt });
+      }
+      return created;
+    });
   }
 
   async getOrCreateWidgetQuestions(projectId: string): Promise<{ ratingId: string; categoryId: string; messageId: string }> {

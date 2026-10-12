@@ -4,9 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Crown, Lock, Zap, BarChart3, Map, FileText, Code, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 type LimitsData = {
   plan: string;
+  basePlan: string;
+  effectivePlan: string;
   activated: boolean;
   projectCount: number;
   totalResponses: number;
@@ -14,12 +19,29 @@ type LimitsData = {
   maxResponses: number | null;
   canCreateProject: boolean;
   canSubmitResponse: boolean;
+  canRunAiInsight: boolean;
+  monthlyUsed: number;
+  monthlyLimit: number | null;
+  monthlyRemaining: number | null;
+  responseUsed: number;
+  responseLimit: number | null;
+  responseRemaining: number | null;
+  aiInsightUsed: number;
+  aiInsightLimit: number | null;
+  aiInsightRemaining: number | null;
+  aiInsightsUnlimited: boolean;
+  resetsAt: string;
+  trialActive: boolean;
+  trialEnded: boolean;
+  trialEndsAt: string | null;
 };
 
 export function useActivation() {
   const { user } = useAuth();
   const { data: limits, isLoading } = useQuery<LimitsData>({
     queryKey: ["/api/limits"],
+    refetchOnMount: "always",
+    refetchInterval: 60_000,
   });
 
   if (user?.role === "platform_admin") {
@@ -29,7 +51,7 @@ export function useActivation() {
   return {
     limits,
     isLoading,
-    activated: user?.planType !== "none" && user?.planType !== undefined,
+    activated: limits?.activated ?? false,
   };
 }
 
@@ -45,9 +67,24 @@ export function PaywallGate({ children }: { children: React.ReactNode }) {
 }
 
 function PaywallScreen() {
+  const { limits } = useActivation();
+  const { toast } = useToast();
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const trialEnded = limits?.trialEnded;
+  const startGrowthCheckout = async () => {
+    setCheckoutLoading(true);
+    try {
+      const response = await apiRequest("POST", "/api/billing/checkout", { plan: "growth" });
+      const data = await response.json();
+      if (data.url) window.location.href = data.url;
+    } catch (error: any) {
+      toast({ title: "Checkout failed", description: error.message, variant: "destructive" });
+      setCheckoutLoading(false);
+    }
+  };
   const features = [
     { icon: Zap, label: "Unlimited feedback projects" },
-    { icon: BarChart3, label: "Unlimited responses" },
+    { icon: BarChart3, label: "50 responses and AI insights per month on Lifetime" },
     { icon: Sparkles, label: "AI-powered insights (GPT-4o)" },
     { icon: Map, label: "Public roadmap with upvotes" },
     { icon: FileText, label: "Product changelog page" },
@@ -62,10 +99,12 @@ function PaywallScreen() {
             <Lock className="w-8 h-8 text-amber-500" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-paywall-title">
-            Activate Your Account
+            {trialEnded ? "Your free trial has ended. Upgrade to continue" : "Activate Your Account"}
           </h1>
           <p className="text-muted-foreground max-w-md mx-auto">
-            Get a plan or redeem a Lifetime Deal code to unlock all features and start collecting feedback.
+            {trialEnded
+              ? "Upgrade to continue using your feedback projects and insights."
+              : "Get a plan or redeem a Lifetime Deal code to unlock all features and start collecting feedback."}
           </p>
         </div>
 
@@ -89,14 +128,16 @@ function PaywallScreen() {
         </Card>
 
         <div className="flex flex-col gap-3">
-          <a href="/#pricing">
-            <Button className="w-full" size="lg" data-testid="button-paywall-upgrade">
+          {trialEnded ? (
+            <Button className="w-full" size="lg" onClick={startGrowthCheckout} disabled={checkoutLoading} data-testid="button-paywall-upgrade">
               <Crown className="w-4 h-4 mr-2" />
-              View Plans & Activate
+              {checkoutLoading ? "Redirecting..." : "Upgrade to Growth — $19/month"}
             </Button>
-          </a>
+          ) : (
+            <a href="/#pricing"><Button className="w-full" size="lg" data-testid="button-paywall-upgrade"><Crown className="w-4 h-4 mr-2" />View Plans & Activate</Button></a>
+          )}
           <p className="text-xs text-center text-muted-foreground">
-            Get lifetime access for just $59 — one-time payment
+            {trialEnded ? "500 responses per month with unlimited AI insights" : "Choose Growth monthly or Lifetime access"}
           </p>
         </div>
       </div>

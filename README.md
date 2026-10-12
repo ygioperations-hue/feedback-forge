@@ -4,6 +4,12 @@ A SaaS feedback collection and management platform built with React, Express.js,
 
 ---
 
+## Database rollout and tests
+
+Railway runs `npm run db:migrate` as its pre-deploy command. The runner locks migration execution, validates the database, applies new files from `migrations/` in one transaction, verifies the resulting schema, and prevents deployment when any step fails. Application startup does not modify or seed the database. Do not use `db:push` against staging or production.
+
+Run `npm test`, `npm run check`, and `npm run build` with Node 22. Set `TEST_DATABASE_URL` to a disposable PostgreSQL database with the app schema to run the database integration specs; they are skipped otherwise. Never point it at production because the specs insert and delete data.
+
 ## Tech Stack
 
 ### Frontend
@@ -77,7 +83,7 @@ feedbackforge/
 | Table | Description |
 |-------|-------------|
 | `users` | User accounts with roles (`customer`, `platform_admin`) and plan types |
-| `plans` | Available pricing plans (monthly, yearly, lifetime) |
+| `plans` | Available pricing plans (Growth and Lifetime) |
 | `subscriptions` | Stripe subscription records |
 | `projects` | Customer feedback projects |
 | `questions` | Feedback form questions (rating, text, multiple choice) |
@@ -161,7 +167,7 @@ NODE_ENV=development
 > node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 > ```
 
-### 5. Push the Database Schema
+### 5. Create a local development schema
 
 This syncs your Drizzle schema to the PostgreSQL database:
 
@@ -169,7 +175,7 @@ This syncs your Drizzle schema to the PostgreSQL database:
 npm run db:push
 ```
 
-This creates all the necessary tables. No manual SQL or migration files needed.
+This command is for local development only. Load sample data explicitly with `npm run db:seed` after creating a development user.
 
 ### 6. Stripe Setup for Local Development
 
@@ -197,9 +203,7 @@ This starts the Express backend and Vite frontend together on a single port. Ope
 http://localhost:5000
 ```
 
-The database is automatically seeded on first startup with:
-- Default pricing plans (Monthly, Yearly, Lifetime)
-- An admin account: `ygi.operations@gmail.com` / `admin123`
+The server does not seed data during startup. For a local development database, create a user and run `npm run db:seed` explicitly to load sample projects.
 
 ---
 
@@ -211,7 +215,9 @@ The database is automatically seeded on first startup with:
 | `npm run build` | Build for production (compiles frontend and backend) |
 | `npm start` | Run the production build |
 | `npm run check` | Run TypeScript type checking |
+| `npm run db:migrate` | Apply checked SQL migrations for staging and production |
 | `npm run db:push` | Push Drizzle schema changes to the database |
+| `npm run db:seed` | Load sample data into a non-production database |
 
 ### Starting the Server
 ```bash
@@ -249,10 +255,15 @@ The project has no platform-specific dependencies and can be deployed anywhere t
 - Add secrets via Tools → Secrets
 - PostgreSQL is provisioned automatically
 
-### On Other Platforms (Railway, Render, Fly.io, VPS, etc.)
+### On Railway
+1. Connect the application service to the deployment branch
+2. Set all required service variables, including a `DATABASE_URL` reference to the PostgreSQL service
+3. The committed `railway.json` builds the application, runs checked migrations before deployment, starts the server, and verifies `/api/health`
+
+### On Other Platforms (Render, Fly.io, VPS, etc.)
 1. Set all required environment variables (see table above)
 2. Run `npm install` then `npm run build`
-3. Run `npm run db:push` to initialize the database
+3. Run `npm run db:migrate` before replacing the old application instances
 4. Start with `npm start`
 5. The server listens on `PORT` (defaults to `5000`) at `0.0.0.0`
 

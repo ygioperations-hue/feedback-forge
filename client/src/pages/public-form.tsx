@@ -74,7 +74,9 @@ export default function PublicForm() {
       setSubmitted(true);
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to submit", description: err.message, variant: "destructive" });
+      if (!err.message.includes("temporarily unavailable")) {
+        toast({ title: "Failed to submit", description: err.message, variant: "destructive" });
+      }
     },
   });
 
@@ -223,6 +225,12 @@ export default function PublicForm() {
             </Card>
           ))}
 
+        {submitMutation.error?.message.includes("temporarily unavailable") && (
+          <div role="alert" className="rounded-md border border-amber-500 p-4 text-sm" data-testid="form-monthly-limit">
+            <p className="font-medium">Form temporarily unavailable</p>
+            <p>{submitMutation.error.message}</p>
+          </div>
+        )}
         <div className="flex justify-end pb-8">
           <Button
             onClick={() => submitMutation.mutate()}

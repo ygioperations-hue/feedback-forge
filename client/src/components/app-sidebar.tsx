@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BrandLogo } from "@/components/brand-logo";
+import { useActivation } from "@/components/paywall-gate";
 
 const customerNavItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -33,6 +34,7 @@ const adminNavItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout, isLoggingOut } = useAuth();
+  const { limits } = useActivation();
 
   const isAdmin = user?.role === "platform_admin";
   const navItems = isAdmin ? adminNavItems : customerNavItems;
@@ -76,9 +78,9 @@ export function AppSidebar() {
               <div className="px-2">
                 <Badge variant="secondary" className="text-xs w-full justify-center" data-testid="badge-sidebar-plan">
                   <Crown className="w-3 h-3 mr-1" />
-                  {user.planType === "lifetime_starter" || user.planType === "lifetime_pro" ? "Lifetime" :
-                   user.planType === "monthly" ? "Monthly" :
-                   user.planType === "yearly" ? "Yearly" : user.planType}
+                  {limits?.effectivePlan === "growth" ? "Growth" :
+                   user.planType === "lifetime_starter" || user.planType === "lifetime_pro" ? "Lifetime" :
+                   user.planType === "trial" ? "Free Trial" : user.planType}
                 </Badge>
               </div>
             )}

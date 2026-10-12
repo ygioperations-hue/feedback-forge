@@ -1,64 +1,20 @@
 import { db } from "./storage";
 import { users, plans, projects, questions, responses, answers, roadmapItems, changelogItems } from "@shared/schema";
-import { eq } from "drizzle-orm";
-import bcrypt from "bcryptjs";
 
-export async function seedDatabase() {
-  const existingPlans = await db.select().from(plans);
-  if (existingPlans.length === 0) {
-    await db.insert(plans).values([
-      { name: "Monthly", price: 2900, interval: "month" },
-      { name: "Yearly", price: 24900, interval: "year" },
-      { name: "Lifetime", price: 5900, interval: "lifetime" },
-    ]);
-    console.log("Plans seeded: Monthly ($29/mo), Yearly ($249/yr), Lifetime ($59)");
-  } else {
-    const hasLifetime = existingPlans.some(p => p.interval === "lifetime");
-    if (!hasLifetime) {
-      await db.insert(plans).values([
-        { name: "Lifetime", price: 5900, interval: "lifetime" },
-      ]);
-      console.log("Lifetime plan seeded ($59)");
-    }
-  }
+export async function seedDatabase(environment = process.env.NODE_ENV) {
+  if (environment === "production") throw new Error("Database seeding is disabled in production");
 
-  const adminEmail = "ygi.operations@gmail.com";
-  const existingAdmin = await db.select().from(users).where(
-    eq(users.email, adminEmail)
-  );
-  if (existingAdmin.length === 0) {
-    const adminHash = await bcrypt.hash("admin123", 10);
-    await db.insert(users).values({
-      email: adminEmail,
-      password: adminHash,
-      firstName: "Admin",
-      lastName: "User",
-      role: "platform_admin",
-      planType: "lifetime_pro",
-    });
-    console.log(`Admin account created: ${adminEmail}`);
-  }
+  await db.insert(plans).values([
+    { key: "lifetime", name: "Lifetime", price: 5900, interval: "lifetime" },
+    { key: "growth_monthly", name: "Growth", price: 1900, interval: "month" },
+  ]).onConflictDoNothing({ target: plans.key });
 
   const existingProjects = await db.select().from(projects);
   if (existingProjects.length > 0) return;
 
   const existingUsers = await db.select().from(users);
-  let userId: string;
-
-  if (existingUsers.length > 0) {
-    userId = existingUsers[0].id;
-  } else {
-    const hashedPassword = await bcrypt.hash("password123", 10);
-    const [user] = await db.insert(users).values({
-      email: "demo@feedbackforge.app",
-      password: hashedPassword,
-      firstName: "Demo",
-      lastName: "User",
-      role: "platform_admin",
-      planType: "lifetime_pro",
-    }).returning();
-    userId = user.id;
-  }
+  if (existingUsers.length === 0) throw new Error("Create a development user before loading sample data");
+  const userId = existingUsers[0].id;
 
   const [p1] = await db.insert(projects).values({
     name: "Website Redesign Feedback",
@@ -168,5 +124,5 @@ export async function seedDatabase() {
     ]);
   }
 
-  console.log("Database seeded successfully (demo@feedbackforge.app / password123)");
+  console.log("Development sample data seeded successfully");
 }

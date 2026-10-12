@@ -1,5 +1,6 @@
 import { storage } from './storage';
 import { getStripeClient } from './stripeClient';
+import { stripePriceMatchesPlan } from './billingPlans';
 
 export async function ensureStripePrices() {
   try {
@@ -37,13 +38,12 @@ export async function ensureStripePrices() {
       const existingPrices = await stripe.prices.list({
         product: productId,
         active: true,
+        limit: 100,
       });
 
       const isOneTime = plan.interval === 'lifetime';
       const existingPrice = existingPrices.data.find(
-        p => isOneTime
-          ? (p.unit_amount === plan.price && !p.recurring)
-          : (p.unit_amount === plan.price && p.recurring?.interval === plan.interval)
+        p => stripePriceMatchesPlan(p, plan) && (p.metadata?.planKey === plan.key || !p.metadata?.planKey)
       );
 
       if (existingPrice) {
@@ -54,7 +54,7 @@ export async function ensureStripePrices() {
           product: productId,
           unit_amount: plan.price,
           currency: 'usd',
-          metadata: { plan: plan.name.toLowerCase() },
+          metadata: { plan: plan.name.toLowerCase(), planKey: plan.key },
         };
         if (!isOneTime) {
           priceParams.recurring = { interval: plan.interval as 'month' | 'year' };
@@ -68,5 +68,6 @@ export async function ensureStripePrices() {
     console.log('Stripe prices synced successfully');
   } catch (err: any) {
     console.error('Failed to ensure Stripe prices:', err?.message);
+    throw err;
   }
 }

@@ -7,15 +7,9 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Check, Shield, Zap, Crown, Users, BarChart3, Code, Star, Lock } from "lucide-react";
+import { Check, Shield, Zap, Crown, BarChart3, Code, Lock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { BrandLogo } from "@/components/brand-logo";
-
-/* Subscription plans hidden for Phase 1 launch — only LTD via Stripe is active
-const subscriptionPlans = [
-  { name: "Monthly", price: "$29", period: "/month", ... },
-  { name: "Yearly", price: "$249", period: "/year", ... },
-]; */
 
 /* ltdTiers kept for reference — UI now shows single $59 Lifetime card via Stripe checkout
 const ltdTiers = [
@@ -25,6 +19,7 @@ const ltdTiers = [
 
 type LimitsData = {
   plan: string;
+  effectivePlan: string;
   activated: boolean;
   projectCount: number;
   totalResponses: number;
@@ -41,8 +36,7 @@ export default function Pricing() {
   const [ltdCode, setLtdCode] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
-  const handleCheckout = async (planName: string) => {
-    const plan = planName.toLowerCase() as "monthly" | "yearly" | "lifetime";
+  const handleCheckout = async (plan: "growth" | "lifetime") => {
     setCheckoutLoading(plan);
     try {
       const res = await apiRequest("POST", "/api/billing/checkout", { plan });
@@ -67,7 +61,7 @@ export default function Pricing() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Lifetime deal activated!", description: "You now have unlimited access to all features." });
+      toast({ title: "Lifetime deal activated!", description: "Your lifetime plan is active with 50 monthly responses and AI insights." });
       setLtdCode("");
       queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -80,6 +74,7 @@ export default function Pricing() {
 
   const activated = limits?.activated ?? false;
   const isLifetime = limits?.plan?.startsWith("lifetime") ?? false;
+  const isGrowth = limits?.effectivePlan === "growth";
 
   return (
     <div className="min-h-screen bg-background">
@@ -116,7 +111,7 @@ export default function Pricing() {
           )}
         </div>
 
-        {!activated && (
+        {!isLifetime && (
           <>
             <div className="text-center mb-8">
               <div className="inline-flex items-center gap-2 bg-amber-500/10 text-amber-700 dark:text-amber-400 px-4 py-1.5 rounded-full text-sm font-medium mb-4">
@@ -136,19 +131,19 @@ export default function Pricing() {
               <CardContent className="p-6 sm:p-8 space-y-6">
                 <div className="text-center">
                   <h3 className="text-xl font-semibold">Lifetime Access</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Everything unlimited, forever — one single payment</p>
+                  <p className="text-sm text-muted-foreground mt-1">Lifetime access with 50 monthly responses and AI insights</p>
                   <div className="flex items-baseline justify-center gap-1 mt-4">
                     <span className="text-3xl font-bold">$59</span>
                     <span className="text-sm text-muted-foreground">one-time</span>
                   </div>
                   <p className="text-sm text-amber-600 dark:text-amber-400 font-medium mt-2" data-testid="text-ltd-savings">
-                    One payment. Unlimited access. Forever.
+                    One payment. Lifetime access. Forever.
                   </p>
                 </div>
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg mx-auto">
                   {[
                     "Unlimited projects",
-                    "Unlimited responses & submissions",
+                    "50 responses and AI insights per month",
                     "AI-powered insights (GPT-4o)",
                     "Public roadmap & changelog",
                     "Embeddable feedback widget",
@@ -165,8 +160,8 @@ export default function Pricing() {
                   <Button
                     size="lg"
                     className="bg-amber-500 hover:bg-amber-600 text-white"
-                    disabled={activated || checkoutLoading === "lifetime"}
-                    onClick={() => handleCheckout("Lifetime")}
+                    disabled={isLifetime || checkoutLoading === "lifetime"}
+                    onClick={() => handleCheckout("lifetime")}
                     data-testid="button-ltd-checkout"
                   >
                     <Crown className="w-4 h-4 mr-2" />
@@ -176,32 +171,53 @@ export default function Pricing() {
               </CardContent>
             </Card>
 
-            {/* Code redemption and subscription plans hidden for Phase 1 launch — only LTD via Stripe is active */}
           </>
         )}
 
+        <Card className="max-w-2xl mx-auto mb-8 border-purple-500/50" data-testid="card-growth-pricing">
+          <CardContent className="p-6 sm:p-8 space-y-6 text-center">
+            <div>
+              <Badge className="mb-3">Higher usage</Badge>
+              <h3 className="text-xl font-semibold">Growth</h3>
+              <p className="text-sm text-muted-foreground mt-1">500 feedback responses per UTC month and unlimited AI insights</p>
+              <div className="flex items-baseline justify-center gap-1 mt-4">
+                <span className="text-3xl font-bold">$19</span><span className="text-sm text-muted-foreground">/month</span>
+              </div>
+            </div>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg mx-auto text-left">
+              {["500 responses per month", "Unlimited AI insights", "Public roadmap & changelog", "Cancel anytime"].map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm"><Check className="w-4 h-4 shrink-0 mt-0.5 text-purple-500" /><span>{item}</span></li>
+              ))}
+            </ul>
+            <Button size="lg" onClick={() => handleCheckout("growth")} disabled={isGrowth || checkoutLoading === "growth"} data-testid="button-growth-checkout">
+              <Zap className="w-4 h-4 mr-2" />
+              {isGrowth ? "Growth Active" : checkoutLoading === "growth" ? "Redirecting..." : "Upgrade to Growth — $19/month"}
+            </Button>
+          </CardContent>
+        </Card>
+
         <div className="text-center space-y-6 mb-12">
-          <h2 className="text-xl font-semibold">Trusted by product teams everywhere</h2>
+          <h2 className="text-xl font-semibold">Simple, transparent pricing</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-2xl mx-auto">
             <div className="flex flex-col items-center gap-1 p-3">
-              <Users className="w-6 h-6 text-muted-foreground" />
-              <span className="text-2xl font-bold">1,200+</span>
-              <span className="text-xs text-muted-foreground">Active Users</span>
+              <Zap className="w-6 h-6 text-muted-foreground" />
+              <span className="text-2xl font-bold">7-Day</span>
+              <span className="text-xs text-muted-foreground">Free Trial</span>
             </div>
             <div className="flex flex-col items-center gap-1 p-3">
-              <BarChart3 className="w-6 h-6 text-muted-foreground" />
-              <span className="text-2xl font-bold">50K+</span>
-              <span className="text-xs text-muted-foreground">Responses Collected</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 p-3">
-              <Star className="w-6 h-6 text-muted-foreground" />
-              <span className="text-2xl font-bold">4.9/5</span>
-              <span className="text-xs text-muted-foreground">User Rating</span>
+              <Crown className="w-6 h-6 text-muted-foreground" />
+              <span className="text-2xl font-bold">$59 One-Time</span>
+              <span className="text-xs text-muted-foreground">Lifetime Access</span>
             </div>
             <div className="flex flex-col items-center gap-1 p-3">
               <Shield className="w-6 h-6 text-muted-foreground" />
-              <span className="text-2xl font-bold">99.9%</span>
-              <span className="text-xs text-muted-foreground">Uptime</span>
+              <span className="text-2xl font-bold">No recurring fees</span>
+              <span className="text-xs text-muted-foreground">ever</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 p-3">
+              <Zap className="w-6 h-6 text-muted-foreground" />
+              <span className="text-2xl font-bold">AI-powered insights</span>
+              <span className="text-xs text-muted-foreground">(GPT-4o)</span>
             </div>
           </div>
         </div>

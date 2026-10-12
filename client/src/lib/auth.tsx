@@ -10,6 +10,7 @@ type AuthUser = {
   lastName: string;
   role: string;
   planType: string;
+  trialEndsAt: string | null;
 };
 
 type AuthData = {

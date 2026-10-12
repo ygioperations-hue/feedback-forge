@@ -5,7 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware } from "./auth";
-import { WebhookHandlers } from "./webhookHandlers";
+import { WebhookHandlers, WebhookSignatureError } from "./webhookHandlers";
 import { ensureStripePrices } from "./stripe-setup";
 
 process.on("uncaughtException", (err) => {
@@ -21,6 +21,10 @@ process.on("SIGHUP", () => {});
 const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
+
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 
 app.use(
   helmet({
@@ -56,7 +60,7 @@ app.post(
       res.status(200).json({ received: true });
     } catch (error: any) {
       console.error('Webhook error:', error.message);
-      res.status(400).json({ error: 'Webhook processing error' });
+      res.status(error instanceof WebhookSignatureError ? 400 : 500).json({ error: 'Webhook processing error' });
     }
   }
 );
@@ -106,9 +110,6 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const { seedDatabase } = await import("./seed");
-  await seedDatabase().catch((err) => console.error("Seed error:", err));
-
   if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY) {
     await ensureStripePrices();
   } else {

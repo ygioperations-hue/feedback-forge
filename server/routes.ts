@@ -1,6 +1,9 @@
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, MonthlyLimitError, monthWindow } from "./storage";
+import { GROWTH_PLAN_KEY } from "./monthlyQuota";
+import { checkoutConfig } from "./billingPlans";
+import { reconcileStripeSubscription } from "./stripeSubscriptions";
 import { insertProjectSchema, insertQuestionSchema, insertAnswerSchema, insertRoadmapItemSchema, insertChangelogItemSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
@@ -10,6 +13,16 @@ import { getStripeClient, getStripePublishableKey } from "./stripeClient";
 
 function p(val: string | string[]): string {
   return Array.isArray(val) ? val[0] : val;
+}
+
+function sendMonthlyLimit(res: Response, error: unknown, publicMessage = false): boolean {
+  if (!(error instanceof MonthlyLimitError)) return false;
+  res.status(429).json({
+    code: "MONTHLY_LIMIT_REACHED",
+    message: publicMessage ? "This feedback form is temporarily unavailable. Please try again next month." : error.message,
+    resetsAt: error.resetsAt,
+  });
+  return true;
 }
 
 function widgetCors(req: Request, res: Response, next: NextFunction) {
@@ -136,19 +149,35 @@ const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
-async function isUserActivated(userId: string): Promise<{ activated: boolean; plan: string }> {
+const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const TRIAL_ENDED_MESSAGE = "Your free trial has ended. Upgrade to continue";
+const PUBLIC_FORM_UNAVAILABLE_MESSAGE = "This feedback form is temporarily unavailable. Please try again later.";
+
+type AccessStatus = {
+  activated: boolean;
+  plan: string;
+  effectivePlan: string;
+  trialActive: boolean;
+  trialEnded: boolean;
+  trialEndsAt: Date | null;
+};
+
+async function getAccessStatus(userId: string): Promise<AccessStatus> {
   const user = await storage.getUserById(userId);
-  if (!user) return { activated: false, plan: "none" };
-
-  if (user.role === "platform_admin") {
-    return { activated: true, plan: "lifetime_pro" };
+  if (!user) return { activated: false, plan: "none", effectivePlan: "none", trialActive: false, trialEnded: false, trialEndsAt: null };
+  const entitlement = await storage.getUsageEntitlement(userId);
+  if (!entitlement) return { activated: false, plan: "none", effectivePlan: "none", trialActive: false, trialEnded: false, trialEndsAt: null };
+  if (user.planType === "trial" && entitlement.trialEnded) {
+    await storage.updateUserPlanType(user.id, "none");
   }
-
-  if (user.planType !== "none") {
-    return { activated: true, plan: user.planType };
-  }
-
-  return { activated: false, plan: "none" };
+  return {
+    activated: entitlement.activated,
+    plan: entitlement.basePlan === "trial" && entitlement.trialEnded ? "none" : entitlement.basePlan,
+    effectivePlan: entitlement.effectivePlan,
+    trialActive: entitlement.trialActive,
+    trialEnded: entitlement.trialEnded,
+    trialEndsAt: user.trialEndsAt,
+  };
 }
 
 export async function registerRoutes(
@@ -178,9 +207,12 @@ export async function registerRoutes(
         password: hashedPassword,
         firstName: sanitize(firstName),
         lastName: sanitize(lastName),
+        planType: "trial",
+        trialEndsAt: new Date(Date.now() + TRIAL_DURATION_MS),
       });
 
       req.session.userId = user.id;
+      const access = await getAccessStatus(user.id);
 
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -188,7 +220,7 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to create account" });
         }
         res.status(201).json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: access.plan, trialEndsAt: access.trialEndsAt },
         });
       });
     } catch (err: any) {
@@ -219,6 +251,7 @@ export async function registerRoutes(
       }
 
       req.session.userId = user.id;
+      const access = await getAccessStatus(user.id);
 
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -226,7 +259,7 @@ export async function registerRoutes(
           return res.status(500).json({ message: "Failed to log in" });
         }
         res.json({
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: access.plan, trialEndsAt: access.trialEndsAt },
         });
       });
     } catch (err) {
@@ -254,9 +287,10 @@ export async function registerRoutes(
     if (!user) {
       return res.status(401).json({ message: "Not authenticated" });
     }
+    const access = await getAccessStatus(user.id);
 
     res.json({
-      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: user.planType },
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, planType: access.plan, trialEndsAt: access.trialEndsAt },
     });
   });
 
@@ -343,14 +377,14 @@ export async function registerRoutes(
   app.post("/api/projects", requireAuth, async (req, res) => {
     try {
       const uid = req.session.userId!;
-      const { activated, plan } = await isUserActivated(uid);
+      const { activated, plan } = await getAccessStatus(uid);
 
       if (!activated) {
-        return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
+        return res.status(403).json({ message: TRIAL_ENDED_MESSAGE });
       }
 
       if (plan === "lifetime_starter") {
-        const existingProjects = await storage.getProjectsByUserId(uid);
+        const existingProjects = await storage.getProjects(uid);
         if (existingProjects.length >= 3) {
           return res.status(403).json({ message: "Starter Lifetime plan is limited to 3 projects. Upgrade to Pro Lifetime for unlimited projects." });
         }
@@ -563,19 +597,21 @@ export async function registerRoutes(
       }
 
       if (project.userId) {
-        const { activated } = await isUserActivated(project.userId);
+        const { activated } = await getAccessStatus(project.userId);
         if (!activated) {
-          return res.status(403).json({ message: "Account not activated. Please purchase a plan or redeem a Lifetime Deal code." });
+          return res.status(403).json({ message: PUBLIC_FORM_UNAVAILABLE_MESSAGE });
         }
       }
 
       const response = await storage.createResponse(
         { projectId: project.id, respondentName: sanitizedName || null, respondentEmail: respondentEmail || null },
-        sanitizedAnswers
+        sanitizedAnswers,
+        project.userId || undefined
       );
 
       res.status(201).json(response);
     } catch (err) {
+      if (sendMonthlyLimit(res, err, true)) return;
       res.status(500).json({ message: "Failed to submit feedback" });
     }
   });
@@ -588,9 +624,9 @@ export async function registerRoutes(
       if (project.status === "draft") return res.status(403).json({ message: "This project is not published yet" });
 
       if (project.userId) {
-        const { activated } = await isUserActivated(project.userId);
+        const { activated } = await getAccessStatus(project.userId);
         if (!activated) {
-          return res.status(403).json({ message: "Account not activated. Feedback collection is paused." });
+          return res.status(403).json({ message: PUBLIC_FORM_UNAVAILABLE_MESSAGE });
         }
       }
 
@@ -623,11 +659,13 @@ export async function registerRoutes(
           { questionId: qIds.ratingId, value: String(rating) },
           { questionId: qIds.categoryId, value: category },
           { questionId: qIds.messageId, value: sanitizedMessage },
-        ]
+        ],
+        project.userId || undefined
       );
 
       res.status(201).json(response);
     } catch (err) {
+      if (sendMonthlyLimit(res, err, true)) return;
       res.status(500).json({ message: "Failed to submit widget feedback" });
     }
   });
@@ -720,11 +758,13 @@ export async function registerRoutes(
   });
 
   app.post("/api/ai/summary", requireAuth, aiLimiter, async (req, res) => {
+    let insightUsageId: string | undefined;
+    let insightSucceeded = false;
     try {
       const uid = req.session.userId!;
-      const { activated } = await isUserActivated(uid);
+      const { activated } = await getAccessStatus(uid);
       if (!activated) {
-        return res.status(403).json({ message: "AI Insights requires an active plan. Upgrade to unlock." });
+        return res.status(403).json({ message: TRIAL_ENDED_MESSAGE });
       }
 
       const apiKey = process.env.OPENAI_API_KEY;
@@ -739,6 +779,8 @@ export async function registerRoutes(
       if (allResponses.length === 0) {
         return res.status(400).json({ message: "No feedback responses to analyze" });
       }
+
+      insightUsageId = await storage.reserveInsightRun(uid);
 
       const responsesSlice = allResponses.slice(-100);
 
@@ -782,6 +824,8 @@ export async function registerRoutes(
         return res.status(500).json({ message: "AI returned an unexpected format. Please try again." });
       }
 
+      await storage.completeInsightRun(insightUsageId);
+      insightSucceeded = true;
       res.json({
         ...parsedAi,
         responseCount: allResponses.length,
@@ -789,8 +833,14 @@ export async function registerRoutes(
         generatedAt: new Date().toISOString(),
       });
     } catch (err: any) {
+      if (sendMonthlyLimit(res, err)) return;
       console.error("AI summary error:", err?.message);
       res.status(500).json({ message: err?.message || "Failed to generate AI summary" });
+    } finally {
+      if (insightUsageId && !insightSucceeded) {
+        try { await storage.releaseInsightRun(insightUsageId); }
+        catch (error) { console.error("Failed to release AI usage reservation:", error); }
+      }
     }
   });
 
@@ -873,7 +923,7 @@ export async function registerRoutes(
   app.get("/api/plans", async (_req, res) => {
     try {
       const allPlans = await storage.getPlans();
-      res.json(allPlans.map(p => ({
+      res.json(allPlans.filter(p => p.key === "lifetime" || p.key === GROWTH_PLAN_KEY).map(p => ({
         id: p.id,
         name: p.name,
         price: p.price,
@@ -900,7 +950,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Platform admins do not need a subscription" });
       }
 
-      const schema = z.object({ plan: z.enum(["monthly", "yearly", "lifetime"]) });
+      const schema = z.object({ plan: z.enum(["growth", "lifetime"]) });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid plan selected" });
@@ -913,20 +963,44 @@ export async function registerRoutes(
         return res.status(400).json({ message: "You already have lifetime access." });
       }
 
-      if (parsed.data.plan !== "lifetime") {
-        const activeSub = await storage.getActiveSubscription(user.id);
-        if (activeSub) {
-          return res.status(400).json({ message: "You already have an active subscription. Please cancel your current plan before subscribing to a new one." });
-        }
-      }
-
-      const interval = parsed.data.plan === "monthly" ? "month" : parsed.data.plan === "yearly" ? "year" : "lifetime";
-      const dbPlan = await storage.getPlanByInterval(interval);
+      const config = checkoutConfig(parsed.data.plan);
+      const dbPlan = await storage.getPlanByKey(config.planKey);
       if (!dbPlan || !dbPlan.stripePriceId) {
         return res.status(400).json({ message: "No price found for selected plan. Please try again later." });
       }
 
       const stripe = getStripeClient();
+
+      let growthAttempt: Awaited<ReturnType<typeof storage.claimGrowthCheckout>> | undefined;
+      const checkoutExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      if (parsed.data.plan === "growth") {
+        growthAttempt = await storage.claimGrowthCheckout(user.id, checkoutExpiresAt);
+        if (growthAttempt.activeSubscription) {
+          return res.status(409).json({ code: "SUBSCRIPTION_ALREADY_ACTIVE", message: "You already have an active subscription." });
+        }
+        if (!growthAttempt.attempt) throw new Error("Could not reserve Growth checkout");
+        if (!growthAttempt.created) {
+          if (!growthAttempt.attempt.stripeSessionId) {
+            const retryAt = growthAttempt.attempt.createdAt.getTime() + 60_000;
+            if (Date.now() < retryAt) {
+              return res.status(409).json({ code: "CHECKOUT_IN_PROGRESS", message: "A Growth checkout is already being created. Please try again shortly." });
+            }
+            if (Date.now() >= growthAttempt.attempt.createdAt.getTime() + 25 * 60_000) {
+              await storage.clearGrowthCheckout(user.id);
+              growthAttempt = await storage.claimGrowthCheckout(user.id, checkoutExpiresAt);
+              if (!growthAttempt.attempt || !growthAttempt.created) throw new Error("Could not renew Growth checkout reservation");
+            }
+          } else {
+            const existingSession = await stripe.checkout.sessions.retrieve(growthAttempt.attempt.stripeSessionId);
+            if (existingSession.status === "open" && existingSession.url) {
+              return res.json({ url: existingSession.url, reused: true });
+            }
+            await storage.clearGrowthCheckout(user.id);
+            growthAttempt = await storage.claimGrowthCheckout(user.id, checkoutExpiresAt);
+            if (!growthAttempt.attempt || !growthAttempt.created) throw new Error("Could not renew Growth checkout reservation");
+          }
+        }
+      }
 
       let customerId = user.stripeCustomerId;
       if (!customerId) {
@@ -934,22 +1008,35 @@ export async function registerRoutes(
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,
           metadata: { userId: user.id },
-        });
+        }, growthAttempt?.attempt ? { idempotencyKey: `growth-customer-${growthAttempt.attempt.attemptId}` } : undefined);
         await storage.updateUserStripeCustomerId(user.id, customer.id);
         customerId = customer.id;
       }
 
-      const isLifetime = parsed.data.plan === "lifetime";
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ['card'],
-        line_items: [{ price: dbPlan.stripePriceId, quantity: 1 }],
-        mode: isLifetime ? 'payment' : 'subscription',
-        success_url: `${baseUrl}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/#pricing`,
-        metadata: { userId: user.id, planId: dbPlan.id, plan: parsed.data.plan },
-      });
+      let session;
+      try {
+        session = await stripe.checkout.sessions.create({
+          customer: customerId,
+          payment_method_types: ['card'],
+          line_items: [{ price: dbPlan.stripePriceId, quantity: 1 }],
+          mode: config.mode,
+          success_url: `${baseUrl}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${baseUrl}/#pricing`,
+          expires_at: parsed.data.plan === "growth" && growthAttempt?.attempt
+            ? Math.floor(growthAttempt.attempt.expiresAt.getTime() / 1000)
+            : undefined,
+          metadata: { userId: user.id, planId: dbPlan.id, planKey: dbPlan.key, plan: parsed.data.plan },
+          subscription_data: parsed.data.plan === "growth" ? { metadata: { userId: user.id, planKey: dbPlan.key } } : undefined,
+        }, growthAttempt?.attempt ? { idempotencyKey: `growth-checkout-${growthAttempt.attempt.attemptId}` } : undefined);
+      } catch (error) {
+        throw error;
+      }
+
+      if (growthAttempt?.attempt) {
+        const saved = await storage.setGrowthCheckoutSession(user.id, growthAttempt.attempt.attemptId, session.id);
+        if (!saved) throw new Error("Growth checkout reservation expired before the session was saved");
+      }
 
       res.json({ url: session.url });
     } catch (err: any) {
@@ -992,7 +1079,7 @@ export async function registerRoutes(
 
           try {
             const activeSub = await storage.getActiveSubscription(user.id);
-            if (activeSub && activeSub.stripeSubscriptionId) {
+            if (activeSub && activeSub.plan.key !== GROWTH_PLAN_KEY && activeSub.stripeSubscriptionId) {
               await stripe.subscriptions.cancel(activeSub.stripeSubscriptionId);
               await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, { status: "canceled" });
             }
@@ -1008,45 +1095,12 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No subscription found in session" });
       }
 
-      const existingSub = await storage.getSubscriptionByStripeId(stripeSubscriptionId);
-      if (existingSub) {
-        return res.json({ message: "Subscription already active", status: "active" });
+      const checkoutPlan = await storage.getPlanById(planId);
+      if (!checkoutPlan || checkoutPlan.key !== GROWTH_PLAN_KEY || (metadata.planKey && checkoutPlan.key !== metadata.planKey)) {
+        return res.status(400).json({ message: "Checkout plan does not match" });
       }
-
-      let periodStart: Date = new Date();
-      let periodEnd: Date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-      try {
-        const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-        const subAny = stripeSub as any;
-        const itemData = subAny.items?.data?.[0];
-        const parsedStart = subAny.current_period_start ? new Date(subAny.current_period_start * 1000) : null;
-        const parsedEnd = subAny.current_period_end ? new Date(subAny.current_period_end * 1000) : null;
-        if (parsedStart) periodStart = parsedStart;
-        if (parsedEnd) periodEnd = parsedEnd;
-      } catch (err: any) {
-        console.error("Failed to retrieve subscription details:", err.message);
-      }
-
-      await storage.createSubscription({
-        userId: user.id,
-        planId,
-        stripeSubscriptionId,
-        status: "active",
-        currentPeriodStart: periodStart,
-        currentPeriodEnd: periodEnd,
-        cancelAtPeriodEnd: false,
-      });
-
-      if (!user.planType?.startsWith("lifetime")) {
-        const plan = await storage.getPlanById(planId);
-        if (plan) {
-          const newPlanType = plan.interval === "year" ? "yearly" : "monthly";
-          await storage.updateUserPlanType(user.id, newPlanType);
-        }
-      }
-
-      res.json({ message: "Subscription activated", status: "active" });
+      const reconciled = await reconcileStripeSubscription(stripeSubscriptionId, user.stripeCustomerId || undefined);
+      res.json({ message: "Subscription updated", status: reconciled.status });
     } catch (err: any) {
       console.error("Verify checkout error:", err?.message);
       res.status(500).json({ message: "Failed to verify checkout session" });
@@ -1068,6 +1122,7 @@ export async function registerRoutes(
           id: sub.id,
           status: sub.status,
           planName: sub.plan.name,
+          planKey: sub.plan.key,
           planPrice: sub.plan.price,
           interval: sub.plan.interval,
           currentPeriodStart: sub.currentPeriodStart?.toISOString() || null,
@@ -1113,60 +1168,6 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Payment history error:", err);
       res.status(500).json({ message: "Failed to fetch payment history" });
-    }
-  });
-
-  app.post("/api/billing/switch", requireAuth, async (req, res) => {
-    try {
-      const schema = z.object({ plan: z.enum(["monthly", "yearly"]) });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid plan selected" });
-      }
-
-      const user = await storage.getUserById(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "Not authenticated" });
-
-      const activeSub = await storage.getActiveSubscription(user.id);
-      if (!activeSub || !activeSub.stripeSubscriptionId) {
-        return res.status(400).json({ message: "No active subscription to switch" });
-      }
-
-      if (activeSub.cancelAtPeriodEnd) {
-        return res.status(400).json({ message: "Cannot switch plans while subscription is scheduled for cancellation. Please reactivate first." });
-      }
-
-      const newInterval = parsed.data.plan === "monthly" ? "month" : "year";
-      if (activeSub.plan.interval === newInterval) {
-        return res.status(400).json({ message: "You are already on this plan" });
-      }
-
-      const newPlan = await storage.getPlanByInterval(newInterval);
-      if (!newPlan || !newPlan.stripePriceId) {
-        return res.status(400).json({ message: "Target plan not found" });
-      }
-
-      const stripe = getStripeClient();
-      const stripeSub = await stripe.subscriptions.retrieve(activeSub.stripeSubscriptionId) as any;
-      const subscriptionItemId = stripeSub.items?.data?.[0]?.id;
-
-      if (!subscriptionItemId) {
-        return res.status(500).json({ message: "Could not find subscription item to update" });
-      }
-
-      await stripe.subscriptions.update(activeSub.stripeSubscriptionId, {
-        items: [{ id: subscriptionItemId, price: newPlan.stripePriceId }],
-        proration_behavior: 'create_prorations',
-      } as any);
-
-      await storage.updateSubscriptionByStripeId(activeSub.stripeSubscriptionId, {
-        planId: newPlan.id,
-      });
-
-      res.json({ message: `Switched to ${newPlan.name} plan successfully` });
-    } catch (err: any) {
-      console.error("Switch plan error:", err?.message);
-      res.status(500).json({ message: "Failed to switch plan" });
     }
   });
 
@@ -1344,18 +1345,43 @@ export async function registerRoutes(
         totalResponses += await storage.getResponseCountByProject(proj.id);
       }
 
-      const { activated, plan } = await isUserActivated(uid);
+      const { activated, plan, effectivePlan, trialActive, trialEnded, trialEndsAt } = await getAccessStatus(uid);
+      const entitlement = await storage.getUsageEntitlement(uid);
+      if (!entitlement) return res.status(401).json({ message: "Not authenticated" });
+      const usage = await storage.getMonthlyUsageBreakdown(uid);
 
       const maxProjects = !activated ? 0 : (plan === "lifetime_starter" ? 3 : null);
+      const monthlyUsed = entitlement.sharedLifetimeLimit ? usage.total : usage.responses;
+      const monthlyLimit = entitlement.responseLimit;
+      const monthlyRemaining = monthlyLimit === null ? null : Math.max(0, monthlyLimit - monthlyUsed);
+      const aiUsed = entitlement.sharedLifetimeLimit ? usage.total : usage.insights;
+      const aiRemaining = entitlement.aiInsightLimit === null ? null : Math.max(0, entitlement.aiInsightLimit - aiUsed);
       res.json({
         plan,
+        basePlan: plan,
+        effectivePlan,
         activated,
         projectCount,
         totalResponses,
         maxProjects,
-        maxResponses: activated ? null : 0,
+        maxResponses: entitlement.responseLimit,
+        monthlyUsed,
+        monthlyLimit,
+        monthlyRemaining,
+        responseUsed: usage.responses,
+        responseLimit: entitlement.responseLimit,
+        responseRemaining: monthlyRemaining,
+        aiInsightUsed: usage.insights,
+        aiInsightLimit: entitlement.aiInsightLimit,
+        aiInsightRemaining: aiRemaining,
+        aiInsightsUnlimited: entitlement.aiInsightLimit === null,
+        resetsAt: monthWindow().end.toISOString(),
         canCreateProject: activated && (maxProjects === null || projectCount < maxProjects),
-        canSubmitResponse: activated,
+        canSubmitResponse: activated && (entitlement.responseLimit === null || monthlyUsed < entitlement.responseLimit),
+        canRunAiInsight: activated && (entitlement.aiInsightLimit === null || aiUsed < entitlement.aiInsightLimit),
+        trialActive,
+        trialEnded,
+        trialEndsAt,
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch limits" });

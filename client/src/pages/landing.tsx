@@ -32,12 +32,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import avatar1 from "@assets/stock_images/avatar_sarah.png";
-import avatar2 from "@assets/stock_images/avatar_marcus.png";
-import avatar3 from "@assets/stock_images/avatar_emily.png";
-import avatar4 from "@assets/stock_images/avatar_jessica.png";
-import avatar5 from "@assets/stock_images/avatar_aisha.png";
-import avatar6 from "@assets/stock_images/avatar_daniel.png";
 
 const features = [
   {
@@ -90,51 +84,6 @@ const howItWorks = [
   },
 ];
 
-/* Subscription plans hidden for Phase 1 launch — only LTD via Stripe is active
-const plans = [
-  { id: "monthly", name: "Monthly", price: "$29", period: "/month", ... },
-  { id: "yearly", name: "Yearly", price: "$249", period: "/year", ... },
-]; */
-
-const testimonials = [
-  {
-    quote: "FeedbackForge replaced three different tools for us. The AI insights alone save us hours every week.",
-    name: "Sarah Chen",
-    role: "Product Manager",
-    avatar: avatar1,
-  },
-  {
-    quote: "The embeddable widget is so simple to set up. We started collecting feedback within 5 minutes of signing up.",
-    name: "Marcus Rivera",
-    role: "Engineering Lead",
-    avatar: avatar2,
-  },
-  {
-    quote: "Public roadmap with upvoting means we always build what users actually want. Game changer for our prioritization.",
-    name: "Emily Watkins",
-    role: "Founder & CEO",
-    avatar: avatar3,
-  },
-  {
-    quote: "We went from guessing what to build next to having real data. The response dashboard is incredibly well designed.",
-    name: "Jessica Torres",
-    role: "Head of Product",
-    avatar: avatar4,
-  },
-  {
-    quote: "The changelog feature keeps our users in the loop and shows them we actually listen. Our retention improved noticeably.",
-    name: "Aisha Patel",
-    role: "Customer Success Lead",
-    avatar: avatar5,
-  },
-  {
-    quote: "Lifetime deal was a no-brainer. We use it across four products now and it pays for itself every single month.",
-    name: "Daniel Ortiz",
-    role: "Co-Founder & CTO",
-    avatar: avatar6,
-  },
-];
-
 export default function Landing() {
   usePageTitle("");
   const { isAuthenticated } = useAuth();
@@ -156,7 +105,7 @@ export default function Landing() {
 
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
-  const handleCheckout = async (plan: "monthly" | "yearly" | "lifetime") => {
+  const handleCheckout = async (plan: "growth" | "lifetime") => {
     if (!isAuthenticated) {
       window.location.href = "/signup";
       return;
@@ -175,13 +124,18 @@ export default function Landing() {
     }
   };
 
+  const { data: limits } = useQuery<{ plan: string; effectivePlan: string }>({
+    queryKey: ["/api/limits"],
+    enabled: isAuthenticated,
+  });
+
   const redeemMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/ltd/redeem", { code: ltdCode.trim() });
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Lifetime deal activated!", description: "You now have unlimited access to all features." });
+      toast({ title: "Lifetime deal activated!", description: "Your lifetime plan is active with 50 monthly responses and AI insights." });
       setLtdCode("");
       queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -205,7 +159,6 @@ export default function Landing() {
               <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-features">Features</a>
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how">How it Works</a>
               <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-pricing">Pricing</a>
-              <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-testimonials">Testimonials</a>
             </div>
 
             <div className="hidden md:flex items-center gap-3">
@@ -245,7 +198,6 @@ export default function Landing() {
               <a href="#features" className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Features</a>
               <a href="#how-it-works" className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>How it Works</a>
               <a href="#pricing" className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
-              <a href="#testimonials" className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Testimonials</a>
               <div className="flex flex-col gap-2 pt-2 border-t">
                 {isAuthenticated ? (
                   <Link href="/dashboard">
@@ -308,27 +260,26 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="mt-16 sm:mt-20 grid grid-cols-2 sm:grid-cols-4 gap-6 max-w-2xl mx-auto">
-            <div className="flex flex-col items-center gap-1 text-center">
-              <Users className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-stat-users">1,200+</span>
-              <span className="text-xs text-muted-foreground">Active Users</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 text-center">
-              <BarChart3 className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-stat-responses">50K+</span>
-              <span className="text-xs text-muted-foreground">Responses Collected</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 text-center">
-              <Star className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-stat-rating">4.9/5</span>
-              <span className="text-xs text-muted-foreground">User Rating</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 text-center">
-              <Shield className="w-5 h-5 text-primary mb-1" />
-              <span className="text-2xl sm:text-3xl font-bold" data-testid="text-stat-uptime">99.9%</span>
-              <span className="text-xs text-muted-foreground">Uptime</span>
-            </div>
+          <div className="mt-16 sm:mt-20 max-w-4xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-y-10 lg:gap-y-0 lg:divide-x lg:divide-border">
+            {[
+              { icon: Users, value: "7 days", label: "Free trial", id: "trial" },
+              { icon: BarChart3, value: "$59", label: "One-time, lifetime access", id: "lifetime-price" },
+              { icon: Star, value: "$0", label: "Recurring fees, ever", id: "no-recurring-fees" },
+              { icon: Shield, value: "GPT-4o", label: "AI-powered insights", id: "ai-insights" },
+            ].map(({ icon: Icon, value, label, id }) => (
+              <div key={id} className="flex flex-col items-center text-center px-4">
+                <Icon className="w-5 h-5 text-primary mb-3" />
+                <span
+                  className="text-3xl sm:text-4xl font-bold tracking-tight whitespace-nowrap"
+                  data-testid={`text-fact-${id}`}
+                >
+                  {value}
+                </span>
+                <span className="mt-1.5 text-sm text-muted-foreground leading-snug max-w-[12rem]">
+                  {label}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -464,19 +415,19 @@ export default function Landing() {
             <CardContent className="p-6 sm:p-8 space-y-6">
               <div className="text-center">
                 <h3 className="text-xl font-semibold">Lifetime Access</h3>
-                <p className="text-sm text-muted-foreground mt-1">Everything unlimited, forever — one single payment</p>
+                <p className="text-sm text-muted-foreground mt-1">Lifetime access with 50 monthly responses and AI insights</p>
                 <div className="flex items-baseline justify-center gap-1 mt-4">
                   <span className="text-4xl font-bold">$59</span>
                   <span className="text-muted-foreground">one-time</span>
                 </div>
                 <p className="text-sm text-amber-600 dark:text-amber-400 font-medium mt-2" data-testid="text-ltd-savings">
-                  One payment. Unlimited access. Forever.
+                  One payment. Lifetime access. Forever.
                 </p>
               </div>
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto">
                 {[
                   "Unlimited projects",
-                  "Unlimited responses & submissions",
+                  "50 responses and AI insights per month",
                   "AI-powered insights (GPT-4o)",
                   "Public roadmap & changelog",
                   "Embeddable feedback widget",
@@ -495,7 +446,7 @@ export default function Landing() {
                     size="lg"
                     className="bg-amber-500 hover:bg-amber-600 text-white"
                     onClick={() => handleCheckout("lifetime")}
-                    disabled={checkoutLoading === "lifetime"}
+                    disabled={limits?.plan?.startsWith("lifetime") || checkoutLoading === "lifetime"}
                     data-testid="button-ltd-checkout-landing"
                   >
                     <Crown className="w-4 h-4 mr-2" />
@@ -513,45 +464,29 @@ export default function Landing() {
             </CardContent>
           </Card>
 
-          {/* Code redemption and subscription plans hidden for Phase 1 launch — only LTD via Stripe is active */}
-        </div>
-      </section>
+          <Card className="max-w-2xl mx-auto mb-8 border-purple-500/50" data-testid="card-growth-landing">
+            <CardContent className="p-6 sm:p-8 space-y-6 text-center">
+              <div>
+                <Badge className="mb-3">Higher usage</Badge>
+                <h3 className="text-xl font-semibold">Growth</h3>
+                <p className="text-sm text-muted-foreground mt-1">500 feedback responses per UTC month and unlimited AI insights</p>
+                <div className="flex items-baseline justify-center gap-1 mt-4"><span className="text-4xl font-bold">$19</span><span className="text-muted-foreground">/month</span></div>
+              </div>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto text-left">
+                {["500 responses per month", "Unlimited AI insights", "Public roadmap & changelog", "Cancel anytime"].map((item) => (
+                  <li key={item} className="flex items-start gap-2.5 text-sm"><Check className="w-4 h-4 shrink-0 mt-0.5 text-purple-500" /><span>{item}</span></li>
+                ))}
+              </ul>
+              {isAuthenticated ? (
+                <Button size="lg" onClick={() => handleCheckout("growth")} disabled={limits?.effectivePlan === "growth" || checkoutLoading === "growth"} data-testid="button-growth-checkout-landing">
+                  <Zap className="w-4 h-4 mr-2" />{limits?.effectivePlan === "growth" ? "Growth Active" : checkoutLoading === "growth" ? "Redirecting..." : "Upgrade to Growth — $19/month"}
+                </Button>
+              ) : (
+                <Link href="/signup"><Button size="lg" data-testid="button-growth-signup">Start Free Trial<ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
+              )}
+            </CardContent>
+          </Card>
 
-      <section id="testimonials" className="py-20 sm:py-28 border-t">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-14">
-            <Badge variant="secondary" className="mb-4">Testimonials</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4" data-testid="text-testimonials-title">
-              Loved by product teams
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {testimonials.map((t, i) => (
-              <Card key={i} data-testid={`card-testimonial-${i}`}>
-                <CardContent className="p-6 space-y-4">
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, j) => (
-                      <Star key={j} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
-                  <p className="text-sm leading-relaxed italic text-muted-foreground">"{t.quote}"</p>
-                  <div className="flex items-center gap-3 pt-1">
-                    <img
-                      src={t.avatar}
-                      alt={t.name}
-                      className="w-10 h-10 rounded-full object-cover ring-2 ring-muted shrink-0"
-                      data-testid={`img-testimonial-avatar-${i}`}
-                    />
-                    <div>
-                      <p className="text-sm font-semibold" data-testid={`text-testimonial-name-${i}`}>{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.role}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -623,11 +558,6 @@ export default function Landing() {
                 <li>
                   <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-pricing">
                     Pricing
-                  </a>
-                </li>
-                <li>
-                  <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-testimonials">
-                    Testimonials
                   </a>
                 </li>
                 <li>

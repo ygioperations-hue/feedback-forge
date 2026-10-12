@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CreditCard, CheckCircle, Crown, Calendar, DollarSign, XCircle, RefreshCw, AlertTriangle, ArrowRightLeft } from "lucide-react";
+import { Loader2, CreditCard, CheckCircle, Crown, Calendar, DollarSign, XCircle, RefreshCw, AlertTriangle, ArrowRightLeft, Zap } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useActivation } from "@/components/paywall-gate";
@@ -27,6 +27,7 @@ type SubscriptionData = {
     id: string;
     status: string;
     planName: string;
+    planKey: string;
     planPrice: number;
     interval: string;
     currentPeriodStart: string | null;
@@ -110,21 +111,6 @@ export default function Billing() {
     },
   });
 
-  const switchMutation = useMutation({
-    mutationFn: async (plan: "monthly" | "yearly") => {
-      const res = await apiRequest("POST", "/api/billing/switch", { plan });
-      return res.json();
-    },
-    onSuccess: (data) => {
-      toast({ title: "Plan switched", description: data.message });
-      queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/limits"] });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
   const reactivateMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/billing/reactivate");
@@ -138,6 +124,15 @@ export default function Billing() {
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
+  });
+
+  const growthCheckout = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/billing/checkout", { plan: "growth" });
+      return response.json();
+    },
+    onSuccess: (data) => { if (data.url) window.location.href = data.url; },
+    onError: (error: Error) => toast({ title: "Checkout failed", description: error.message, variant: "destructive" }),
   });
 
   const subscription = billingData?.subscription;
@@ -204,7 +199,7 @@ export default function Billing() {
             <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
             <div>
               <p className="font-medium text-green-700 dark:text-green-400">Payment successful!</p>
-              <p className="text-sm text-muted-foreground">Your lifetime access is now active. Enjoy all features!</p>
+              <p className="text-sm text-muted-foreground">Your plan is active and ready to use.</p>
             </div>
           </CardContent>
         </Card>
@@ -221,8 +216,29 @@ export default function Billing() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Subscription management UI hidden for Phase 1 launch — only LTD shown */}
-          {limits?.plan?.startsWith("lifetime") ? (
+          {limits?.effectivePlan === "growth" && subscription ? (
+            <div className="space-y-4" data-testid="card-growth-current-plan">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-purple-500/10"><Zap className="w-5 h-5 text-purple-500" /></div>
+                <div>
+                  <p className="font-semibold text-lg">Growth</p>
+                  <p className="text-sm text-muted-foreground">{getPlanPrice()} · 500 responses per UTC month · unlimited AI insights</p>
+                </div>
+                <Badge className="ml-auto">{subscription.cancelAtPeriodEnd ? "Cancels soon" : "Active"}</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><p className="text-muted-foreground">Responses this month</p><p className="font-medium">{limits.responseUsed} / {limits.responseLimit}</p></div>
+                <div><p className="text-muted-foreground">AI insights</p><p className="font-medium">Unlimited</p></div>
+              </div>
+              <p className="text-xs text-muted-foreground">Usage resets {new Date(limits.resetsAt).toLocaleDateString()}. Billing {subscription.cancelAtPeriodEnd ? "ends" : "renews"} {formatDate(subscription.currentPeriodEnd)}.</p>
+              {limits.plan.startsWith("lifetime") && <p className="text-xs text-muted-foreground">Your Lifetime plan is retained and resumes when Growth ends.</p>}
+              {subscription.cancelAtPeriodEnd ? (
+                <Button variant="outline" onClick={() => reactivateMutation.mutate()} disabled={reactivateMutation.isPending} data-testid="button-reactivate-growth">Reactivate Growth</Button>
+              ) : (
+                <Button variant="outline" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending} data-testid="button-cancel-growth">Cancel at period end</Button>
+              )}
+            </div>
+          ) : limits?.plan?.startsWith("lifetime") ? (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-500/10">
@@ -233,7 +249,7 @@ export default function Billing() {
                     Lifetime Deal
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Unlimited access forever — no recurring charges
+                    {limits.monthlyLimit === null ? "Unlimited admin access" : "Lifetime access with 50 monthly responses and AI insights"}
                   </p>
                 </div>
                 <Badge className="ml-auto" data-testid="badge-plan-status">Active</Badge>
@@ -246,10 +262,14 @@ export default function Billing() {
                   </p>
                 </div>
                 <div className="text-sm">
-                  <p className="text-muted-foreground">Responses</p>
-                  <p className="font-medium" data-testid="text-ltd-responses">Unlimited</p>
+                  <p className="text-muted-foreground">Monthly responses and AI insights</p>
+                  <p className="font-medium" data-testid="text-ltd-responses">{limits.monthlyLimit === null ? "Unlimited" : `${limits.monthlyUsed} / ${limits.monthlyLimit}`}</p>
                 </div>
               </div>
+              {limits.monthlyLimit !== null && <p className="text-xs text-muted-foreground">Resets {new Date(limits.resetsAt).toLocaleDateString()}.</p>}
+              {limits.monthlyRemaining === 0 && (
+                <div className="flex items-center gap-2 text-sm" data-testid="billing-monthly-limit"><span>Monthly limit reached.</span><Button size="sm" onClick={() => growthCheckout.mutate()} disabled={growthCheckout.isPending}>{growthCheckout.isPending ? "Redirecting..." : "Upgrade to Growth"}</Button></div>
+              )}
             </div>
           ) : (
             <div className="text-center py-4">
@@ -260,7 +280,7 @@ export default function Billing() {
                   Get Lifetime Access — $59
                 </Button>
               </a>
-              <p className="text-xs text-muted-foreground mt-2">One-time payment, unlimited access forever</p>
+              <p className="text-xs text-muted-foreground mt-2">One-time payment, 50 monthly responses and AI insights</p>
             </div>
           )}
         </CardContent>

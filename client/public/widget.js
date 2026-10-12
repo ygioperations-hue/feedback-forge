@@ -32,6 +32,7 @@
     ".ff-submit{width:100%;padding:10px;border:none;border-radius:8px;background:#7c3aed;color:#fff;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .15s}",
     ".ff-submit:hover{opacity:.9}",
     ".ff-submit:disabled{opacity:.6;cursor:not-allowed}",
+    ".ff-error{display:none;margin-top:12px;color:#b91c1c;font-size:13px;line-height:1.4}",
     ".ff-success{text-align:center;padding:32px 20px}",
     ".ff-success svg{width:48px;height:48px;color:#10b981;margin:0 auto 12px}",
     ".ff-success p{margin:0;font-size:15px;color:#4b5563}",
@@ -69,7 +70,7 @@
     + '<div class="ff-field"><label class="ff-label">Category</label><select class="ff-select" id="ff-cat"><option value="">Select...</option><option value="Bug">Bug</option><option value="Feature">Feature</option><option value="Idea">Idea</option><option value="Other">Other</option></select></div>'
     + '<div class="ff-field"><label class="ff-label">Message</label><textarea class="ff-textarea" id="ff-msg" placeholder="Tell us what you think..."></textarea></div>'
     + '<div class="ff-field"><label class="ff-label">Name (optional)</label><input class="ff-input" id="ff-name" placeholder="Your name"/></div>'
-    + '<button class="ff-submit" id="ff-sub">Submit Feedback</button>'
+    + '<button class="ff-submit" id="ff-sub">Submit Feedback</button><div class="ff-error" id="ff-error" role="alert"></div>'
     + '</div>';
   document.body.appendChild(m);
 
@@ -109,6 +110,8 @@
     var name = m.querySelector("#ff-name").value;
     if (!rating || !cat || !msg) { alert("Please fill in rating, category, and message."); return; }
     var sub = m.querySelector("#ff-sub");
+    var errorEl = m.querySelector("#ff-error");
+    errorEl.style.display = "none";
     sub.disabled = true;
     sub.textContent = "Sending...";
     fetch(API, {
@@ -116,15 +119,28 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rating: rating, category: cat, message: msg, name: name || undefined })
     })
-    .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+    .then(function(r) {
+      if (r.ok) return r.json();
+      return r.json().catch(function() { return {}; }).then(function(data) {
+        var error = new Error(data.message || "Something went wrong. Please try again.");
+        error.code = data.code;
+        throw error;
+      });
+    })
     .then(function() {
       m.querySelector(".ff-body").innerHTML = '<div class="ff-success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg><strong>Thank you!</strong><p>Your feedback has been received.</p></div>';
       setTimeout(function() { toggle(false); }, 2500);
     })
-    .catch(function() {
+    .catch(function(error) {
       sub.disabled = false;
       sub.textContent = "Submit Feedback";
-      alert("Something went wrong. Please try again.");
+      if (error.code === "MONTHLY_LIMIT_REACHED") {
+        errorEl.textContent = "This feedback form is temporarily unavailable because its monthly limit has been reached. Please try again next month.";
+        errorEl.style.display = "block";
+      } else {
+        errorEl.textContent = error.message;
+        errorEl.style.display = "block";
+      }
     });
   };
 })();

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   lastName: text("last_name").notNull(),
   role: text("role").notNull().default("customer"),
   planType: text("plan_type").notNull().default("none"),
+  trialEndsAt: timestamp("trial_ends_at"),
   stripeCustomerId: text("stripe_customer_id"),
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
@@ -19,6 +20,7 @@ export const users = pgTable("users", {
 
 export const plans = pgTable("plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("plan_key").notNull().unique(),
   name: text("name").notNull(),
   price: integer("price").notNull(),
   interval: text("interval").notNull(),
@@ -30,11 +32,19 @@ export const subscriptions = pgTable("subscriptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   planId: varchar("plan_id").notNull().references(() => plans.id),
-  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
   status: text("status").notNull().default("active"),
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),
   cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const growthCheckoutAttempts = pgTable("growth_checkout_attempts", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  attemptId: varchar("attempt_id").notNull().unique().default(sql`gen_random_uuid()`),
+  stripeSessionId: text("stripe_session_id").unique(),
+  expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -67,6 +77,17 @@ export const responses = pgTable("responses", {
   respondentEmail: text("respondent_email"),
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
 });
+
+// Usage rows intentionally have no FK to responses or projects: deleting feedback
+// must not restore an account's allowance for the month.
+export const monthlyUsage = pgTable("monthly_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  status: text("status").notNull().default("complete"),
+  responseId: varchar("response_id").unique(),
+  occurredAt: timestamp("occurred_at").notNull().defaultNow(),
+}, (table) => [index("monthly_usage_user_date_idx").on(table.userId, table.occurredAt)]);
 
 export const answers = pgTable("answers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -105,7 +126,7 @@ export const ltdCodes = pgTable("ltd_codes", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, resetToken: true, resetTokenExpiry: true, stripeCustomerId: true, role: true, planType: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, resetToken: true, resetTokenExpiry: true, stripeCustomerId: true, role: true, planType: true, trialEndsAt: true });
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true });
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
@@ -122,6 +143,7 @@ export type Plan = typeof plans.$inferSelect;
 export type InsertPlan = z.infer<typeof insertPlanSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type GrowthCheckoutAttempt = typeof growthCheckoutAttempts.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Question = typeof questions.$inferSelect;
